@@ -1253,6 +1253,21 @@ function applyDisplay(){
   p.append('gsmooth', document.getElementById('gsmooth').value);
   p.append('warn_thr', document.getElementById('warn_thr').value);
   p.append('warn_clr', document.getElementById('warn_clr').value);
+  /* Mono OLED rows save instantly on change, but Apply posts the whole form:
+     without these the full-form save would wipe them all to off. */
+  if (document.getElementById('mno_lyr').checked) p.append('mno_lyr', '1');
+  if (document.getElementById('mno_bar').checked) p.append('mno_bar', '1');
+  if (document.getElementById('mno_timalt').checked) p.append('mno_timalt', '1');
+  if (document.getElementById('mno_ptim').checked) p.append('mno_ptim', '1');
+  if (document.getElementById('mno_dtmp').checked) p.append('mno_dtmp', '1');
+  if (document.getElementById('mno_clk').checked) p.append('mno_clk', '1');
+  if (document.getElementById('mno_stat').checked) p.append('mno_stat', '1');
+  if (document.getElementById('mno_hot').checked) p.append('mno_hot', '1');
+  if (document.getElementById('mno_splash').checked) p.append('mno_splash', '1');
+  if (document.getElementById('mno_wen').checked) p.append('mno_wen', '1');
+  p.append('mno_wkey', document.getElementById('mno_wkey').value);
+  p.append('mno_wq', document.getElementById('mno_wq').value);
+  p.append('mno_cont', document.getElementById('mno_cont').value);
   for (var i = 0; i < GAUGE_KEYS.length; i++){
     var k = GAUGE_KEYS[i];
     p.append(k + '_a', document.getElementById(k + '_a').value);
@@ -1407,6 +1422,51 @@ function toggleSetting(key, on){
   fetch('/save/toggle',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'key='+key+'&val='+encodeURIComponent(val)})
     .then(function(r){if(r.ok)showToast(typeof on==='boolean'?(on?key+' ON':key+' OFF'):key+' saved');else showToast('Error');})
     .catch(function(e){showToast('Toggle failed');console.warn('toggleSetting:',e);});
+}
+
+/* ============ Mono OLED board: hide non-mono settings ============
+   The mono-c3 board (SH1106 128x64) only uses Printer connection, the Mono
+   OLED card, Clock timezone/format, WiFi & System and Diagnostics. Everything
+   else is TFT-only markup that stays compiled in (other boards ignore the
+   data-mono flag) and is only hidden here, never deleted. */
+function isMonoBoard(){
+  return document.body && document.body.getAttribute('data-mono') === '1';
+}
+function hideCardByHeading(secId, text){
+  var sec = document.getElementById(secId);
+  if (!sec) return;
+  var heads = sec.querySelectorAll('.card h3');
+  for (var i = 0; i < heads.length; i++){
+    if (heads[i].textContent.indexOf(text) !== -1){
+      var card = heads[i].closest('.card');
+      if (card) card.hidden = true;
+    }
+  }
+}
+function applyMonoVisibility(){
+  if (!isMonoBoard()) return;
+  var hideNav = ['display', 'afterprint', 'colors', 'hardware', 'power'];
+  for (var i = 0; i < hideNav.length; i++){
+    var nav = document.querySelector('.nav-item[data-section="' + hideNav[i] + '"]');
+    if (nav) nav.hidden = true;
+    var sec = document.getElementById('sec-' + hideNav[i]);
+    if (sec) sec.hidden = true;
+  }
+  // Printer section: keep connection only; gauge layout / light / rotation
+  // are TFT/multi-printer concepts on a single-mono board.
+  hideCardByHeading('sec-printer', 'Gauge Layout');
+  hideCardByHeading('sec-printer', 'Chamber light');
+  hideCardByHeading('sec-printer', 'Printer rotation');
+  // Print screen section: keep only the Mono OLED card.
+  var ps = document.getElementById('sec-printscreen');
+  if (ps){
+    var cards = ps.querySelectorAll('.card');
+    for (var c = 0; c < cards.length; c++){
+      if (!cards[c].querySelector('#mno_lyr')) cards[c].hidden = true;
+    }
+  }
+  // Clock section: the printer name/IP footer is a TFT status-bar concept.
+  hideCardByHeading('sec-clock', 'Clock screen info');
 }
 
 /* ============ Printer errors (HMS + print_error) ============
@@ -2013,10 +2073,14 @@ applyThemeMode(document.documentElement.getAttribute('data-theme') || 'dark');
   initHelpTips();
   initDirtyTracking();
   applyCardsHints();
+  applyMonoVisibility();
   // Initial section: URL hash, else last visited (localStorage), else printer.
   // Printer Errors only exists on boards that compiled its markup in, so it
-  // joins the list only when the page actually carries it.
+  // joins the list only when the page actually carries it. On mono the TFT
+  // sections are hidden above, so they leave the list too (a bookmarked #colors
+  // must fall back to printer instead of a blank panel).
   var SECTIONS = ['printer','display','printscreen','afterprint','clock','colors','hardware','wifi','power','diag'];
+  if (isMonoBoard()) SECTIONS = ['printer','printscreen','clock','wifi','diag'];
   if (document.getElementById('sec-errors')) SECTIONS.push('errors');
   var initId = 'printer';
   if (location.hash){

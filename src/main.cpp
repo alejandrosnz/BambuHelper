@@ -21,6 +21,11 @@
 #include <driver/gpio.h>
 #include <time.h>
 
+#ifdef BOARD_IS_MONO
+#include <WiFi.h>
+#include "mono_display.h"
+#endif
+
 static unsigned long splashEnd = 0;
 static unsigned long finishScreenStart = 0;
 static bool finishActive = false;          // guards finishScreenStart against millis() wrap
@@ -1577,6 +1582,9 @@ void setup() {
   Serial.printf("\n=== BambuHelper %s Starting ===\n", FW_VERSION);
 
   loadSettings();
+#ifdef BOARD_IS_MONO
+  monoDisplayInit();
+#endif
   recordBootSlotVersion();  // names this slot's fw for the OTA rollback UI
   initDisplay();
   Battery::begin();
@@ -1590,6 +1598,24 @@ void loop() {
     flushFrame();  // commit splash draws to panel (no-op on non-JC boards)
     return;
   }
+#ifdef BOARD_IS_MONO
+  // Mono OLED: boot screen with SSID/IP once WiFi is resolved; then
+  // monoDisplayTick() picks the screen, the cadence (1 s static / ~10 fps
+  // marquee-blink) and the mock mode ("mock ..." over Serial).
+  monoMockHandleSerial();
+  {
+    static bool monoNetShown = false;
+    if (!monoNetShown && splashEnd == 0 && !monoMockActive()) {
+      monoNetShown = true;
+      // showSplash off = straight to the clock tick below. Failures still
+      // show: AP mode or no STA connection means no WiFi (a missing printer
+      // is NOT a failure - the idle screen already reports it as X).
+      bool skipBoot = !monoSettings.showSplash && !isAPMode() && isWiFiConnected();
+      if (!skipBoot) monoShowBoot();
+    }
+    monoDisplayTick();
+  }
+#endif
 
   handleWiFi();
   handleWebServer();

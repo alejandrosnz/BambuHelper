@@ -383,10 +383,37 @@ struct TasmotaSettings {
   bool    autoOffCancelOnDoor; // cancel this auto-off cycle if door opens while waiting
 };
 
+// Mono OLED (SH1106 128x64) display options. Factory defaults follow the
+// tuned mono layout: done-time temps, idle status icon and HOT warning off;
+// the time/ETA alternation, layer line, bar, idle clock and splash on.
+// Stored as individual NVS bools like the rest of DisplaySettings.
+struct MonoDisplaySettings {
+  bool showTempsDone;     // temps row on the Done screen
+  bool showTimePrinting;  // bottom-right remaining/end time while printing
+  bool showLayer;         // Layer x/y line while printing
+  bool showBar;           // progress bar while printing
+  bool showTimeAlt;       // alternate remaining time and ETA bottom-right every 5 s
+  bool showHotIdle;       // HOT warning on the idle screen
+  bool showClockIdle;     // big clock on idle (off = big temps)
+  bool showStatusIdle;    // connection X/circle on the idle clock
+  bool showSplash;        // boot screen with helper IP + printers, held ~3 s
+                         // (off = straight to clock; AP/no-WiFi still shows)
+  bool weatherEnabled;    // OpenWeatherMap on the idle clock (needs key + location)
+  char weatherKey[65];    // OpenWeatherMap API key (32 hex chars)
+  char weatherQuery[64];  // location query, e.g. "Madrid,ES" (no spaces)
+  uint8_t oledContrast;   // SH1106 contrast 0-255 (255 = max, the driver default)
+};
+
+// SH1106 contrast floor: below ~20 the panel is effectively all-black, and a
+// 0-contrast value persists in NVS (invisible screen until the web UI is
+// opened blindly). Both save paths clamp with this.
+#define MONO_OLED_CONTRAST_MIN 20
+
 extern char wifiSSID[33];
 extern char wifiPass[65];
 extern uint8_t brightness;
 extern DisplaySettings dispSettings;
+extern MonoDisplaySettings monoSettings;
 
 // The live neutral text colors (#163). Defined here rather than in config.h so
 // there is exactly one definition and no per-file #undef dance: a drawing file

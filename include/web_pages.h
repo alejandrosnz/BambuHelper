@@ -148,7 +148,7 @@ static const char PAGE_HTML_1[] PROGMEM = R"rawliteral(
 (function(){try{var t=localStorage.getItem('bh-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
 </head>
-<body>
+<body data-mono="%IS_MONO%">
 
 <!-- ============ Top bar ============ -->
 <div class="topbar">
@@ -589,6 +589,65 @@ R"rawliteral(
     </label>
     <div class="help-text" style="padding-left:28px" data-gauges-only>Frees width for the filament name. Use when you already show layer count and/or power as gauges. Applies to the print screen only (not the finish summary).</div>
 %AMST_ROW%
+  </div>
+
+  <div class="card">
+    <div class="card-head"><div><h3>Mono OLED</h3><p>Which rows the 128x64 OLED shows. Applies to the mono-c3 board only; other boards ignore it.</p></div></div>
+    <label class="check-row">
+      <input type="checkbox" id="mno_lyr" value="1" %MONO_LYR% onchange="toggleSetting('mno_lyr',this.checked)">
+      <label for="mno_lyr">Show Layer line while printing</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_bar" value="1" %MONO_BAR% onchange="toggleSetting('mno_bar',this.checked)">
+      <label for="mno_bar">Show progress bar while printing</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_timalt" value="1" %MONO_TIMALT% onchange="toggleSetting('mno_timalt',this.checked)">
+      <label for="mno_timalt">Alternate remaining time and ETA bottom-right (5 s)</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_ptim" value="1" %MONO_PTIM% onchange="toggleSetting('mno_ptim',this.checked)">
+      <label for="mno_ptim">Show remaining time while printing</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_dtmp" value="1" %MONO_DTMP% onchange="toggleSetting('mno_dtmp',this.checked)">
+      <label for="mno_dtmp">Show temps on the Done screen</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_clk" value="1" %MONO_CLK% onchange="toggleSetting('mno_clk',this.checked)">
+      <label for="mno_clk">Show big clock when idle (off = big temps)</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_stat" value="1" %MONO_STAT% onchange="toggleSetting('mno_stat',this.checked)">
+      <label for="mno_stat">Show connection icon on the clock (X / circle)</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_hot" value="1" %MONO_HOT% onchange="toggleSetting('mno_hot',this.checked)">
+      <label for="mno_hot">Show HOT warning when idle</label>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" id="mno_splash" value="1" %MONO_SPLASH% onchange="toggleSetting('mno_splash',this.checked)">
+      <label for="mno_splash">Show boot screen with WiFi/IP (off = straight to clock)</label>
+    </label>
+    <div class="field" style="margin-top:var(--sp-3)">
+      <label>Weather on the idle clock (OpenWeatherMap, every 15 min while idle)</label>
+      <label class="check-row">
+        <input type="checkbox" id="mno_wen" value="1" %MONO_WEN% onchange="toggleSetting('mno_wen',this.checked)">
+        <label for="mno_wen">Show weather icon + temperature</label>
+      </label>
+      <label for="mno_wkey">Weather API key (OpenWeatherMap)</label>
+      <input type="text" id="mno_wkey" class="mono" value="%MONO_WKEY%" placeholder="32-char API key" maxlength="64">
+      <label for="mno_wq" style="margin-top:var(--sp-2)">Location</label>
+      <input type="text" id="mno_wq" class="mono" value="%MONO_WQ%" placeholder="Madrid,ES" maxlength="63">
+      <div class="hint">Free key: sign up at <a href="https://openweathermap.org/appid" target="_blank" style="color:var(--accent)">openweathermap.org</a> and copy it from <em>API keys</em>. Use City,CC with no spaces. Key + location save with Apply Display Settings below.</div>
+    </div>
+    <div class="field">
+      <label class="hstack" style="justify-content:space-between" for="mno_cont"><span>OLED contrast</span><span class="mono text-dim" id="mno_contVal">%MONO_CONT%</span></label>
+      <input type="range" id="mno_cont" min="20" max="255" step="1" value="%MONO_CONT%"
+             oninput="document.getElementById('mno_contVal').textContent=this.value"
+             onchange="toggleSetting('mno_cont',this.value)">
+      <div class="hint">SH1106 contrast, 255 is brightest (default). Applies instantly, no reboot.</div>
+    </div>
   </div>
 
 %EXTENDED_MODES_CARD%

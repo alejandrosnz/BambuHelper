@@ -18,6 +18,21 @@ char wifiSSID[33] = {0};
 char wifiPass[65] = {0};
 uint8_t brightness = 200;
 DisplaySettings dispSettings;
+MonoDisplaySettings monoSettings = {
+  /*showTempsDone*/     false,
+  /*showTimePrinting*/  true,
+  /*showLayer*/         true,
+  /*showBar*/           true,
+  /*showTimeAlt*/       true,
+  /*showHotIdle*/       false,
+  /*showClockIdle*/     true,
+  /*showStatusIdle*/    false,
+  /*showSplash*/        true,
+  /*weatherEnabled*/    false,
+  /*weatherKey*/        "",
+  /*weatherQuery*/      "Madrid,ES",
+  /*oledContrast*/      255,
+};
 GaugeLabels gaugeLabels;
 NetworkSettings netSettings;
 DisplayPowerSettings dpSettings;
@@ -619,6 +634,28 @@ void loadSettings() {
   if (dispSettings.gestHold > GH_NONE) dispSettings.gestHold = GH_LED;
   dispSettings.showBatteryIndicator = prefs.getBool("dsp_bat", def.showBatteryIndicator);
   dispSettings.hideStatusReadout = prefs.getBool("dsp_hidlp", def.hideStatusReadout);
+  monoSettings.showTempsDone = prefs.getBool("mno_dtmp", false);
+  monoSettings.showTimePrinting = prefs.getBool("mno_ptim", true);
+  monoSettings.showLayer = prefs.getBool("mno_lyr", true);
+  monoSettings.showBar = prefs.getBool("mno_bar", true);
+  monoSettings.showTimeAlt = prefs.getBool("mno_timalt", true);
+  monoSettings.showHotIdle = prefs.getBool("mno_hot", false);
+  monoSettings.showClockIdle = prefs.getBool("mno_clk", true);
+  monoSettings.showStatusIdle = prefs.getBool("mno_stat", false);
+  monoSettings.showSplash = prefs.getBool("mno_splash", true);
+  monoSettings.weatherEnabled = prefs.getBool("mno_wen", false);
+  strlcpy(monoSettings.weatherKey, prefs.getString("mno_wkey", "").c_str(),
+          sizeof(monoSettings.weatherKey));
+  sanitizeGaugeLabel(monoSettings.weatherKey, monoSettings.weatherKey,
+                     sizeof(monoSettings.weatherKey));  // corrupt-NVS defense
+  strlcpy(monoSettings.weatherQuery, prefs.getString("mno_wq", "Madrid,ES").c_str(),
+          sizeof(monoSettings.weatherQuery));
+  // Same graph hardening as gauge labels: control/HTML-unsafe chars out,
+  // strict UTF-8, trimmed - keeps the "stored sanitized, emit raw" invariant.
+  sanitizeGaugeLabel(monoSettings.weatherQuery, monoSettings.weatherQuery,
+                     sizeof(monoSettings.weatherQuery));
+  monoSettings.oledContrast =
+      (uint8_t)constrain(prefs.getUChar("mno_cont", 255), MONO_OLED_CONTRAST_MIN, 255);
   {
     uint8_t gm = prefs.getUChar("dsp_glowm", def.glowMode);
     dispSettings.glowMode = (gm <= 2) ? gm : 0;
@@ -990,6 +1027,19 @@ void saveSettings() {
   prefs.putUChar("dsp_ghold", dispSettings.gestHold);
   prefs.putBool("dsp_bat", dispSettings.showBatteryIndicator);
   prefs.putBool("dsp_hidlp", dispSettings.hideStatusReadout);
+  prefs.putBool("mno_dtmp", monoSettings.showTempsDone);
+  prefs.putBool("mno_ptim", monoSettings.showTimePrinting);
+  prefs.putBool("mno_lyr", monoSettings.showLayer);
+  prefs.putBool("mno_bar", monoSettings.showBar);
+  prefs.putBool("mno_timalt", monoSettings.showTimeAlt);
+  prefs.putBool("mno_hot", monoSettings.showHotIdle);
+  prefs.putBool("mno_clk", monoSettings.showClockIdle);
+  prefs.putBool("mno_stat", monoSettings.showStatusIdle);
+  prefs.putBool("mno_splash", monoSettings.showSplash);
+  prefs.putBool("mno_wen", monoSettings.weatherEnabled);
+  prefs.putString("mno_wkey", monoSettings.weatherKey);
+  prefs.putString("mno_wq", monoSettings.weatherQuery);
+  prefs.putUChar("mno_cont", monoSettings.oledContrast);
   prefs.putUShort("dsp_nozmx", dispSettings.nozzleScaleMax);
   prefs.putUShort("dsp_bedmx", dispSettings.bedScaleMax);
   prefs.putUShort("dsp_chbmx", dispSettings.chamberScaleMax);

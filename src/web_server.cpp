@@ -182,6 +182,24 @@ static void readDisplayFromForm() {
     if (tm >= 0 && tm <= 2) dispSettings.timeDisplayMode = (uint8_t)tm;
   }
   dispSettings.fanMatchPrinter = server.hasArg("fanmp");
+  monoSettings.showLayer = server.hasArg("mno_lyr");
+  monoSettings.showBar = server.hasArg("mno_bar");
+  monoSettings.showTimePrinting = server.hasArg("mno_ptim");
+  monoSettings.showTempsDone = server.hasArg("mno_dtmp");
+  monoSettings.showClockIdle = server.hasArg("mno_clk");
+  monoSettings.showStatusIdle = server.hasArg("mno_stat");
+  monoSettings.showHotIdle = server.hasArg("mno_hot");
+  monoSettings.showSplash = server.hasArg("mno_splash");
+  monoSettings.weatherEnabled = server.hasArg("mno_wen");
+  if (server.hasArg("mno_wkey"))
+    sanitizeGaugeLabel(server.arg("mno_wkey").c_str(), monoSettings.weatherKey,
+                       sizeof(monoSettings.weatherKey));
+  if (server.hasArg("mno_wq"))
+    sanitizeGaugeLabel(server.arg("mno_wq").c_str(), monoSettings.weatherQuery,
+                       sizeof(monoSettings.weatherQuery));
+  if (server.hasArg("mno_cont"))
+    monoSettings.oledContrast =
+        (uint8_t)constrain(server.arg("mno_cont").toInt(), MONO_OLED_CONTRAST_MIN, 255);
 
   // Edge glow
   if (server.hasArg("glowm")) {
@@ -852,6 +870,20 @@ static void handleToggleSetting() {
   else if (key == "timem")   dispSettings.timeDisplayMode = (uint8_t)constrain(server.arg("val").toInt(), 0, 2);
   else if (key == "fanmp")   dispSettings.fanMatchPrinter = on;
   else if (key == "hidelp")  dispSettings.hideStatusReadout = on;
+  else if (key == "mno_lyr") monoSettings.showLayer = on;
+  else if (key == "mno_bar") monoSettings.showBar = on;
+  else if (key == "mno_timalt") monoSettings.showTimeAlt = on;
+  else if (key == "mno_ptim") monoSettings.showTimePrinting = on;
+  else if (key == "mno_dtmp") monoSettings.showTempsDone = on;
+  else if (key == "mno_clk") monoSettings.showClockIdle = on;
+  else if (key == "mno_stat") monoSettings.showStatusIdle = on;
+  else if (key == "mno_hot") monoSettings.showHotIdle = on;
+  else if (key == "mno_splash") monoSettings.showSplash = on;
+  else if (key == "mno_wen") monoSettings.weatherEnabled = on;
+  else if (key == "mno_cont") {
+    monoSettings.oledContrast =
+        (uint8_t)constrain(server.arg("val").toInt(), MONO_OLED_CONTRAST_MIN, 255);
+  }
   else if (key == "invcol")  dispSettings.invertColors = on;
   else if (key == "cydcls")  dispSettings.cydPanelClassic = on;
   else if (key == "cyd32e")  dispSettings.cyd32eVariant = on;
@@ -1769,6 +1801,22 @@ static void handleSettingsExport() {
   disp["showTimeRemaining"] = (dispSettings.timeDisplayMode == 1);
   disp["fanMatchPrinter"] = dispSettings.fanMatchPrinter;
   disp["hideStatusReadout"] = dispSettings.hideStatusReadout;
+  JsonObject mono = disp["mono"].to<JsonObject>();
+  mono["showTempsDone"] = monoSettings.showTempsDone;
+  mono["showTimePrinting"] = monoSettings.showTimePrinting;
+  mono["showLayer"] = monoSettings.showLayer;
+  mono["showBar"] = monoSettings.showBar;
+  mono["showTimeAlt"] = monoSettings.showTimeAlt;
+  mono["showHotIdle"] = monoSettings.showHotIdle;
+  mono["showClockIdle"] = monoSettings.showClockIdle;
+  mono["showStatusIdle"] = monoSettings.showStatusIdle;
+  mono["showSplash"] = monoSettings.showSplash;
+  // weather enabled + city travel with the backup, but NOT the API key
+  // (backups end up in files/chats; re-entering the key in the web form is
+  // the only manual step).
+  mono["weatherEnabled"] = monoSettings.weatherEnabled;
+  mono["weatherQuery"] = monoSettings.weatherQuery;
+  mono["contrast"] = monoSettings.oledContrast;
   disp["showBatteryIndicator"] = dispSettings.showBatteryIndicator;
   disp["nozzleScaleMax"]  = dispSettings.nozzleScaleMax;
   disp["bedScaleMax"]     = dispSettings.bedScaleMax;
@@ -2193,6 +2241,25 @@ static void handleSettingsImportFinish() {
 #endif
     // Legacy disp["amsView"] is consumed in the printers block above as a fallback
     // for slots that don't have their own per-printer value.
+
+    JsonObject mono = disp["mono"];
+    if (mono) {
+      if (mono["showTempsDone"].is<bool>()) monoSettings.showTempsDone = mono["showTempsDone"].as<bool>();
+      if (mono["showTimePrinting"].is<bool>()) monoSettings.showTimePrinting = mono["showTimePrinting"].as<bool>();
+      if (mono["showLayer"].is<bool>()) monoSettings.showLayer = mono["showLayer"].as<bool>();
+      if (mono["showBar"].is<bool>()) monoSettings.showBar = mono["showBar"].as<bool>();
+      if (mono["showTimeAlt"].is<bool>()) monoSettings.showTimeAlt = mono["showTimeAlt"].as<bool>();
+      if (mono["showHotIdle"].is<bool>()) monoSettings.showHotIdle = mono["showHotIdle"].as<bool>();
+      if (mono["showClockIdle"].is<bool>()) monoSettings.showClockIdle = mono["showClockIdle"].as<bool>();
+      if (mono["showStatusIdle"].is<bool>()) monoSettings.showStatusIdle = mono["showStatusIdle"].as<bool>();
+      if (mono["showSplash"].is<bool>()) monoSettings.showSplash = mono["showSplash"].as<bool>();
+      if (mono["weatherEnabled"].is<bool>()) monoSettings.weatherEnabled = mono["weatherEnabled"].as<bool>();
+      if (mono["weatherQuery"].is<const char*>())
+        sanitizeGaugeLabel(mono["weatherQuery"].as<const char*>(), monoSettings.weatherQuery,
+                           sizeof(monoSettings.weatherQuery));
+      if (mono["contrast"].is<uint8_t>() || mono["contrast"].is<unsigned int>() || mono["contrast"].is<int>())
+        monoSettings.oledContrast = (uint8_t)constrain(mono["contrast"].as<int>(), MONO_OLED_CONTRAST_MIN, 255);
+    }
 
     JsonObject gauges = disp["gauges"];
     if (gauges) {
