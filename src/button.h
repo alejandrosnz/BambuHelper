@@ -6,8 +6,8 @@
 void initButton();
 bool wasButtonPressed();  // returns true once per press (edge-detected, debounced)
 void sanitizeButtonPin();  // zero buttonPin if it conflicts with a reserved
-                           // subsystem (backlight, touch bus, buzzer). No-op
-                           // for touchscreen type.
+                           // subsystem (C3 flash/USB/UART/OLED pins, backlight,
+                           // buzzer), or with a peripheral the board owns.
 
 // Hold-state polling. Pure getters - they reflect whatever the most recent
 // wasButtonPressed() call observed and do NOT consume edge events. The main

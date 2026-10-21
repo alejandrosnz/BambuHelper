@@ -1,172 +1,58 @@
 #include "buzzer.h"
-#include "buzzer_backend.h"
 #include "settings.h"
 #include "config.h"
 #include <time.h>
 
+// The mono build drives a plain passive buzzer from one GPIO. There is no I2S
+// codec, amplifier or IO-expander backend, so the tone output lives here.
+
 void sanitizeBuzzerPin() {
-#if BUZZER_BACKEND_TCA9554
-  // The buzzer is an expander bit here, so there is no pin to validate - and a
-  // stale NVS value from another board must never be driven as a GPIO.
-  buzzerSettings.pin = 0;
-#else
-  // Pin 0 = disabled (no buzzer). Pin 255 is invalid on ESP32 — clamp to 0.
-  // This also handles stale NVS values from firmware that used 255 as "disabled".
+  // Pin 0 = disabled (no buzzer). Pin 255 is the legacy "disabled" value and
+  // must also clamp to 0.
   if (buzzerSettings.pin == 0 || buzzerSettings.pin == 255) {
     buzzerSettings.pin = 0;
     return;
   }
-#if defined(BOARD_IS_WS350)
-  // ws_lcd_350 has no buzzer hardware and the GPIO backend drives the pin LOW
-  // on init/stop even when the buzzer is disabled. The display SPI (SCLK=5,
-  // MOSI=1, MISO=2, DC=3) and shared I2C (SDA=8, SCL=7) lines must never be
-  // driven as a buzzer GPIO or the panel freezes. The default pin is 0, but a
-  // stale/manual NVS value (e.g. 5 from a pre-fix build) can still land here.
-  if (buzzerSettings.pin == 1 || buzzerSettings.pin == 2 ||
-      buzzerSettings.pin == 3 || buzzerSettings.pin == 5 ||
-      buzzerSettings.pin == 6 || buzzerSettings.pin == 7 ||
-      buzzerSettings.pin == 8) {
-    Serial.printf("Buzzer: pin %d reserved on WS350 (display/I2C), disabling\n", buzzerSettings.pin);
+
+  // ESP32-C3 SuperMini reserved pins: GPIO2 is a strapping pin, 8/9 carry the
+  // OLED I2C bus, 11-17 are the SPI flash, 18/19 are USB CDC and 20/21 are
+  // UART0. Driving any of them from the tone output can break boot, the
+  // display bus or the serial console. A stale NVS value from another board
+  // can still land here, so this is not just a UI-level check.
+  const uint8_t p = buzzerSettings.pin;
+  if (p == 2 || p == 8 || p == 9 || (p >= 11 && p <= 21)) {
+    Serial.printf("Buzzer: pin %d reserved on the C3, disabling\n", p);
+    buzzerSettings.pin = 0;
+    return;
+  }
+#if defined(BACKLIGHT_PIN) && BACKLIGHT_PIN >= 0
+  if (p == BACKLIGHT_PIN) {
+    Serial.printf("Buzzer: pin %d conflicts with backlight, disabling\n", p);
     buzzerSettings.pin = 0;
     return;
   }
 #endif
-#if defined(BOARD_IS_WS200)
-  // Waveshare ESP32-S3-Touch-LCD-2.0. Firmware up to v3.7.6 defaulted this
-  // board to the CYD's GPIO 26 (see BUZZER_DEFAULT_PIN), which is in the S3
-  // flash/PSRAM range - and the GPIO backend drives the pin LOW on init/stop
-  // even when the buzzer is disabled. Reject the full reserved set (kept in
-  // sync with the WS200 LED deny-list in led.cpp): display SPI 38/39/40/42/45,
-  // CST816D touch I2C 47/48, battery ADC 5, USB CDC 19/20, flash/PSRAM 26-37.
-  // Backlight 1 is caught by the BACKLIGHT_PIN check below.
-  {
-    uint8_t p = buzzerSettings.pin;
-    bool reserved =
-      (p == 38 || p == 39 || p == 40 || p == 42 || p == 45) ||  // display SPI
-      (p == 47 || p == 48) ||                                    // touch I2C
-      (p == 5) ||                                                // battery ADC
-      (p == 19 || p == 20) ||                                    // USB CDC
-      (p >= 26 && p <= 37);                                      // flash/PSRAM
-    if (reserved) {
-      Serial.printf("Buzzer: pin %d reserved on WS200, disabling\n", p);
-      buzzerSettings.pin = 0;
-      return;
-    }
-  }
-#endif
-#if defined(BOARD_IS_WS280)
-  // Waveshare ESP32-S3-Touch-LCD-2.8, same story as WS200 above (the pre-v3.7.7
-  // default was GPIO 26). Reserved set: display SPI 39/40/41/42/45, CST328
-  // touch 1/2/3/4 (SDA/RST/SCL/IRQ), USB CDC 19/20, flash/PSRAM 26-37.
-  // Backlight 5 is caught by the BACKLIGHT_PIN check below.
-  {
-    uint8_t p = buzzerSettings.pin;
-    bool reserved =
-      (p == 39 || p == 40 || p == 41 || p == 42 || p == 45) ||  // display SPI
-      (p == 1 || p == 2 || p == 3 || p == 4) ||                  // CST328 touch
-      (p == 19 || p == 20) ||                                    // USB CDC
-      (p >= 26 && p <= 37);                                      // flash/PSRAM
-    if (reserved) {
-      Serial.printf("Buzzer: pin %d reserved on WS280, disabling\n", p);
-      buzzerSettings.pin = 0;
-      return;
-    }
-  }
-#endif
-#if defined(BOARD_IS_S3_ZERO) && defined(DISPLAY_240x320)
-  // esp32s3_zero_320 shares the 240x320 layout profile and so also inherited
-  // the CYD's GPIO 26 before v3.7.7. Reserved set matches the S3_ZERO LED
-  // deny-list in led.cpp: display SPI 8-12, onboard WS2812 21, USB CDC 19/20,
-  // flash/PSRAM 26-37. Backlight 13 is caught by the BACKLIGHT_PIN check below.
-  {
-    uint8_t p = buzzerSettings.pin;
-    bool reserved =
-      (p >= 8 && p <= 12) ||                                     // display SPI
-      (p == 21) ||                                               // onboard WS2812
-      (p == 19 || p == 20) ||                                    // USB CDC
-      (p >= 26 && p <= 37);                                      // flash/PSRAM
-    if (reserved) {
-      Serial.printf("Buzzer: pin %d reserved on S3-Zero 320, disabling\n", p);
-      buzzerSettings.pin = 0;
-      return;
-    }
-  }
-#endif
-#if defined(BOARD_IS_ES3N28P)
-  // QD ES3N28P has no GPIO buzzer; the GPIO backend drives the pin LOW on
-  // init/stop even when disabled. The default pin is 0, but a stale/manual NVS
-  // value can still land here. Reject the full reserved set (kept in sync with
-  // the ES3N28P LED deny-list in led.cpp and the button guard in button.cpp):
-  // display SPI 10/11/12/13/46, audio+amp 1/4/5/6/7/8, touch 15/16/17/18,
-  // battery 9, WS2812 42, microSD 38/39/40/41/47/48, USB CDC 19/20, and the
-  // octal flash/PSRAM range 26-37 (driving USB or PSRAM pins can wedge CDC or
-  // corrupt PSRAM). Backlight 45 is caught by the BACKLIGHT_PIN check below.
-  {
-    uint8_t p = buzzerSettings.pin;
-    bool reserved =
-      (p == 10 || p == 11 || p == 12 || p == 13 || p == 46) ||  // display SPI
-      (p == 1 || p == 4 || p == 5 || p == 6 || p == 7 || p == 8) ||  // audio + amp
-      (p == 15 || p == 16 || p == 17 || p == 18) ||             // touch I2C/INT/RST
-      (p == 9) ||                                                // battery ADC
-      (p == 42) ||                                               // WS2812
-      (p == 38 || p == 39 || p == 40 || p == 41 || p == 47 || p == 48) || // microSD
-      (p == 19 || p == 20) ||                                    // USB CDC
-      (p >= 26 && p <= 37);                                      // flash/PSRAM
-    if (reserved) {
-      Serial.printf("Buzzer: pin %d reserved on ES3N28P, disabling\n", p);
-      buzzerSettings.pin = 0;
-      return;
-    }
-  }
-#endif
-#if defined(BOARD_IS_SC05X)
-  // Panlee SC05_X / ZX2D80CE02S has no GPIO buzzer in this target. Reject the
-  // full reserved set (kept in sync with led.cpp and button.cpp): 8080 LCD
-  // bus/control 1/2/7/15/16/17/18/40/41/42, reset 3, touch 8/9/48, TE 38,
-  // RS485 4/5/6, USB CDC 19/20, and the flash/PSRAM range 26-37.
-  {
-    uint8_t p = buzzerSettings.pin;
-    bool reserved =
-      (p == 1 || p == 2 || p == 7 || p == 15 || p == 16 ||
-       p == 17 || p == 18 || p == 40 || p == 41 || p == 42) ||
-      (p == 3) ||                                                // LCD reset
-      (p == 8 || p == 9 || p == 48) ||                           // touch I2C/INT
-      (p == 38) ||                                               // LCD_TE
-      (p == 4 || p == 5 || p == 6) ||                            // RS485
-      (p == 19 || p == 20) ||                                    // USB CDC
-      (p >= 26 && p <= 37);                                      // flash/PSRAM
-    if (reserved) {
-      Serial.printf("Buzzer: pin %d reserved on SC05_X, disabling\n", p);
-      buzzerSettings.pin = 0;
-      return;
-    }
-  }
-#endif
-#if defined(DISPLAY_CYD)
-  // ESP32-32E clone variant: GPIO4 is the speaker amp enable, not a tone
-  // output - the GPIO backend would hijack it and mute the amp.
-  if (dispSettings.cyd32eVariant && buzzerSettings.pin == CYD32E_AMP_EN_PIN) {
-    Serial.printf("Buzzer: pin %d is the 32E amp enable, disabling\n", buzzerSettings.pin);
-    buzzerSettings.pin = 0;
-    return;
-  }
-#endif
-#if defined(BOARD_IS_DIY)
-  // A pin carried over from another board's config could drive a DIY display
-  // line, or one of the chip's flash / USB pins - see isDiyReservedPin().
-  if (isDiyReservedPin(buzzerSettings.pin)) {
-    Serial.printf("Buzzer: pin %d is reserved on this DIY build, disabling\n", buzzerSettings.pin);
-    buzzerSettings.pin = 0;
-    return;
-  }
-#endif
-#if defined(BACKLIGHT_PIN)
-  if (buzzerSettings.pin == BACKLIGHT_PIN) {
-    Serial.printf("Buzzer: pin %d conflicts with backlight, disabling\n", buzzerSettings.pin);
+  if (buttonType != BTN_DISABLED && buttonPin != 0 && p == buttonPin) {
+    Serial.printf("Buzzer: pin %d conflicts with the button, disabling\n", p);
     buzzerSettings.pin = 0;
   }
-#endif
-#endif  // BUZZER_BACKEND_TCA9554
+}
+
+static void buzzerApplyStep(uint16_t freq) {
+  if (buzzerSettings.pin == 0) return;
+  if (freq > 0) {
+    tone(buzzerSettings.pin, freq);
+  } else {
+    noTone(buzzerSettings.pin);
+    digitalWrite(buzzerSettings.pin, LOW);
+  }
+}
+
+static void buzzerStop() {
+  sanitizeBuzzerPin();
+  if (buzzerSettings.pin == 0) return;
+  noTone(buzzerSettings.pin);
+  digitalWrite(buzzerSettings.pin, LOW);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +103,14 @@ void initBuzzer() {
   currentMelody = nullptr;
   melodyIdx = 0;
   melodyLen = 0;
-  if (!buzzerSettings.enabled) {
-    buzzerBackendShutdown();
+  sanitizeBuzzerPin();
+  if (!buzzerSettings.enabled || buzzerSettings.pin == 0) {
+    buzzerStop();
     return;
   }
-  buzzerBackendInit();
-  buzzerBackendStop();
+  pinMode(buzzerSettings.pin, OUTPUT);
+  digitalWrite(buzzerSettings.pin, LOW);
+  buzzerStop();
 }
 
 bool buzzerIsPlaying() {
@@ -273,7 +161,7 @@ void buzzerPlay(BuzzerEvent event) {
 
   melodyIdx = 0;
   playing = true;
-  buzzerBackendApplyStep(currentMelody[0].freq);
+  buzzerApplyStep(currentMelody[0].freq);
   stepStartMs = millis();
 }
 
@@ -282,21 +170,19 @@ void buzzerPlayClick() {
   if (!buzzerSettings.buttonClick) return;
 
   bool wasPlaying = playing;
-  buzzerBackendApplyStep(melodyClick[0].freq);
+  buzzerApplyStep(melodyClick[0].freq);
   unsigned long t = millis();
   while (millis() - t < melodyClick[0].ms) {
-    buzzerBackendTick();
     delay(1);
   }
-  buzzerBackendStop();
+  buzzerStop();
   if (wasPlaying && currentMelody && melodyIdx < melodyLen) {
     stepStartMs = millis();
-    buzzerBackendApplyStep(currentMelody[melodyIdx].freq);
+    buzzerApplyStep(currentMelody[melodyIdx].freq);
   }
 }
 
 void buzzerTick() {
-  buzzerBackendTick();  // always tick - handles idle timeout shutdown
   if (!playing || !currentMelody) return;
 
   if (millis() - stepStartMs < currentMelody[melodyIdx].ms) return;
@@ -305,10 +191,10 @@ void buzzerTick() {
   if (melodyIdx >= melodyLen) {
     playing = false;
     currentMelody = nullptr;
-    buzzerBackendStop();
+    buzzerStop();
     return;
   }
 
-  buzzerBackendApplyStep(currentMelody[melodyIdx].freq);
+  buzzerApplyStep(currentMelody[melodyIdx].freq);
   stepStartMs = millis();
 }

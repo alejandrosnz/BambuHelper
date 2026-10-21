@@ -26,15 +26,6 @@ void applyLedDuty(uint8_t duty);
 void sanitizeLedPin();
 bool isLedPinAllowed(uint8_t pin);
 
-// Same question for a colour driver, which is allowed to claim the board's own
-// onboard RGB pins - the deny-list reserves those precisely so nothing else does.
-bool isRgbLedPinAllowed(uint8_t pin);
-
-// Onboard RGB pin defaults for the portal's "use the onboard LED" shortcut.
-// Returns false when the board has no onboard RGB, leaving the outputs untouched.
-// On the CYD the red pin depends on the ESP32-32E runtime variant.
-bool onboardRgbPins(uint8_t &r, uint8_t &g, uint8_t &b, bool &anode);
-
 // Live preview from web UI: reconfigures LED with form values. NVS untouched.
 // color is 0xRRGGBB and is ignored by LED_DRV_SINGLE.
 void previewLed(bool enabled, uint8_t driver, uint8_t pinR, uint8_t pinG,
@@ -88,7 +79,8 @@ void ledSetNightSuspended(bool suspended);
 // forced aborts, plus the tick that transitions IDLE -> ACTIVE); false otherwise.
 //   heldNow     - any tracked input currently held
 //   holdMs      - duration of the held source (0 if none)
-//   suppressDim - caller-asserted abort (e.g. BOARD_BTN_3 co-pressed = shutdown combo)
+//   suppressDim - caller-asserted abort (e.g. the power-confirm screen owns the
+//                 press and must not start a dim session)
 bool ledHoldDimUpdate(bool heldNow, uint32_t holdMs, bool suppressDim);
 
 #endif // LED_H

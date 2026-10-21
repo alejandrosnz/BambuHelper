@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include "display_ui.h"
-#include "thumb_fetch.h"
 #include "settings.h"
 #include "wifi_manager.h"
 #include "web_server.h"
@@ -15,10 +14,6 @@
 #include "display_card.h"       // cardAmsPeekToggle
 #include "hms_lookup.h"
 #include "tasmota.h"
-#include "battery.h"
-#include "camera_client.h"
-#include <esp_sleep.h>
-#include <driver/gpio.h>
 #include <time.h>
 
 #ifdef BOARD_IS_MONO
@@ -39,15 +34,6 @@ static uint8_t finishDryViewSlot = 0xFF;
 static unsigned long connectingScreenStart = 0;  // for stuck-state timeout
 static PrinterGcodeState prevGcodeStateId[MAX_ACTIVE_PRINTERS] = { GCODE_UNKNOWN };
 static bool prevGcodeStateSeen[MAX_ACTIVE_PRINTERS] = { false };
-#if defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)
-static unsigned long boardShutdownHoldStart = 0;
-#endif
-#if defined(BOARD_BTN_1)
-static bool lastBoardBtn = false;
-static bool boardBtnStable = false;
-static unsigned long boardBtnChangeMs = 0;
-static unsigned long boardBtnPressStartMs = 0;
-#endif
 
 // --- Button-driven plug power control (#136) --------------------------------
 static const uint32_t POWER_MULTICLICK_MS         = 450;   // double/triple-click window
@@ -175,58 +161,11 @@ static void cycleDisplayedPrinterFromButton() {
   }
 }
 
-static bool wasBoardButtonPressed() {
-#if defined(BOARD_BTN_1)
-  bool raw = (digitalRead(BOARD_BTN_1) == LOW);
-  if (raw != lastBoardBtn) {
-    boardBtnChangeMs = millis();
-    lastBoardBtn = raw;
-  }
-  if ((millis() - boardBtnChangeMs) < 50) return false;
-  bool result = false;
-  if (raw && !boardBtnStable) {
-    result = true;
-    boardBtnPressStartMs = millis();
-  } else if (!raw && boardBtnStable) {
-    boardBtnPressStartMs = 0;
-  }
-  boardBtnStable = raw;
-  return result;
-#else
-  return false;
-#endif
-}
-
-static bool isBoardButtonHeld() {
-#if defined(BOARD_BTN_1)
-  return boardBtnStable;
-#else
-  return false;
-#endif
-}
-
-static uint32_t boardButtonHoldDurationMs() {
-#if defined(BOARD_BTN_1)
-  if (!boardBtnStable || boardBtnPressStartMs == 0) return 0;
-  return (uint32_t)(millis() - boardBtnPressStartMs);
-#else
-  return 0;
-#endif
-}
-
-static bool isBoardButton3Held() {
-#if defined(BOARD_BTN_3)
-  return digitalRead(BOARD_BTN_3) == LOW;
-#else
-  return false;
-#endif
-}
-
 // Open the AMS drying peek (#150) for the shown printer, if it has anything to
 // show. Single entry point on purpose: there are two call sites (tap from the
-// print screen, and tapping out of the camera) and both MUST arm the deadline -
-// setting the screen state without it leaves a stale value and the expiry check
-// closes the peek on the very next loop.
+// print screen, and tapping out of the error screen) and both MUST arm the
+// deadline - setting the screen state without it leaves a stale value and the
+// expiry check closes the peek on the very next loop.
 //
 // state.printing is required rather than just "the print screen is up": with
 // keepPrintScreen the dashboard is also shown while idle, and the sticky branch
@@ -372,15 +311,9 @@ static void doTapActions() {
 
   // Printer error detail. First stop in the tap cycle while an error stands -
   // it is the thing the user reached for the button about - and tapping out of
-  // it continues into camera / drying rather than dead-ending, so those stay
+  // it continues into the drying peek rather than dead-ending, so it stays
   // reachable on a printer sitting on a permanent code.
   if (cur == SCREEN_HMS) {
-#if BOARD_HAS_CAMERA
-    if (cameraDisplayedHasCameraTile() && cameraCanStreamDisplayedPrinter()) {
-      setScreenState(SCREEN_CAMERA);
-      return;
-    }
-#endif
     if (openDryPeek()) return;
     closeHmsScreen();
     if (getActiveConnCount() >= 2) cycleDisplayedPrinterFromButton();
@@ -389,30 +322,9 @@ static void doTapActions() {
   if ((cur == SCREEN_PRINTING || cur == SCREEN_IDLE || cur == SCREEN_FINISHED) &&
       hmsScreenAlerting() && openHmsScreen(HMS_SCREEN_MS)) return;
 
-#if BOARD_HAS_CAMERA
-  // Camera tap toggle (#120). On a multi-printer setup the camera sits in the
-  // tap cycle for the printer that carries the tile: tapping that printer opens
-  // fullscreen, and tapping out advances to the next printer (so the cycle keeps
-  // moving instead of stranding the user here until the next auto-rotate).
-  if (cur == SCREEN_CAMERA) {
-    // Keep the drying peek reachable on camera boards by making it the next
-    // stop in the cycle: printing -> camera -> drying -> printing (+ next).
-    if (openDryPeek()) return;
-    setScreenState(SCREEN_PRINTING);
-    if (getActiveConnCount() >= 2) cycleDisplayedPrinterFromButton();
-    return;
-  }
-  if (cur == SCREEN_PRINTING && cameraDisplayedHasCameraTile() &&
-      cameraCanStreamDisplayedPrinter()) {
-    setScreenState(SCREEN_CAMERA);
-    return;
-  }
-#endif
-
   // AMS drying peek (#150). During a print the tap has no job on a
   // single-printer setup, so it brings up the drying view for a few seconds.
-  // Tapping out advances the printer when more than one is connected, matching
-  // how the camera tile behaves.
+  // Tapping out advances the printer when more than one is connected.
   if (cur == SCREEN_DRY_PEEK) {
     closeDryPeek();
     if (getActiveConnCount() >= 2) cycleDisplayedPrinterFromButton();
@@ -421,7 +333,7 @@ static void doTapActions() {
   if (cur == SCREEN_PRINTING && openDryPeek()) return;
 
   // Finish / AMS drying toggle (#183). Tapping out returns to the automatic
-  // choice and advances the printer, the same shape as the camera and peek stops.
+  // choice and advances the printer, the same shape as the peek stop.
   if (finishDryChoiceActive() &&
       (cur == SCREEN_FINISHED || cur == SCREEN_IDLE ||
        (cur == SCREEN_PRINTING && dpSettings.keepPrintScreen && finishActive))) {
@@ -537,9 +449,6 @@ static void runSingleTap() {
   // Waking and closing an open overlay work the same whatever the mapping.
   bool passThrough = isNightBlackout() || isSleepStickyScreen(cur) ||
                      cur == SCREEN_HMS || cur == SCREEN_DRY_PEEK;
-#if BOARD_HAS_CAMERA
-  if (cur == SCREEN_CAMERA) passThrough = true;
-#endif
   if (passThrough || dispSettings.gestTap == GT_SMART) { doTapActions(); return; }
   switch (dispSettings.gestTap) {
     case GT_NEXT:
@@ -625,31 +534,17 @@ static void handlePowerConfirmInput(bool held) {
 }
 
 static void handleWakeButton() {
-  // Both edge pollers MUST be called every loop unconditionally - each owns its
-  // own debounce + held-state machine, and skipping a call would freeze it.
   bool touchPress = wasButtonPressed();
-  bool boardPress = wasBoardButtonPressed();
 
   // Any press acknowledges the edge glow on the raw edge, before tap/hold
   // decoding - the press still performs its normal action below. Armed, not
   // active: a press during the dark reminder pause must cancel the reminder
   // cycle too, not just a band that is currently drawing.
-  if ((touchPress || boardPress) && glowIsArmed()) glowDismiss();
+  if (touchPress && glowIsArmed()) glowDismiss();
 
-  bool held = isButtonHeld() || isBoardButtonHeld();
-  uint32_t touchHoldMs = buttonHoldDurationMs();
-  uint32_t boardHoldMs = boardButtonHoldDurationMs();
-  uint32_t holdMs = (touchHoldMs > boardHoldMs) ? touchHoldMs : boardHoldMs;
-  bool suppressDim = isBoardButton3Held();
-#if TOUCH_WAKE_LONGPRESS
-  // Resistive panels (CYD, TZT) register a wake touch as a long press that
-  // easily crosses the 300ms hold threshold. That would ramp the LED (default
-  // direction is up, toward max), save it, and consume the press so the screen
-  // never wakes. Suppress dimming while asleep so the touch only wakes.
-  // Most capacitive panels get crisp short taps and keep hold-to-dim on the
-  // screensaver, but AXS15231B requires the same suppression as XPT2046.
-  if (isSleepStickyScreen(getScreenState())) suppressDim = true;
-#endif
+  bool held = isButtonHeld();
+  uint32_t holdMs = buttonHoldDurationMs();
+  bool suppressDim = false;
 
   // #177: on the "Printer Off" screen, a hold means power-on (handled below), so
   // suppress LED-dim there - the hold must never start a dim session, whether or
@@ -668,7 +563,7 @@ static void handleWakeButton() {
   // then hand off and return before the normal tap/hold logic.
   if (getScreenState() == SCREEN_POWER_CONFIRM) {
     ledHoldDimUpdate(held, holdMs, /*suppressDim=*/true);
-    if (touchPress || boardPress) { buzzerPlayClick(); ledOnUserInteraction(); }
+    if (touchPress) { buzzerPlayClick(); ledOnUserInteraction(); }
     handlePowerConfirmInput(held);
     wasHeldPrev = held;
     holdConsumedThisPress = false;
@@ -685,7 +580,7 @@ static void handleWakeButton() {
   // starts - a hold in the dark must not ramp the LED and write it to NVS.
   if (isNightBlackout() && !isSleepStickyScreen(getScreenState())) {
     ledHoldDimUpdate(held, holdMs, /*suppressDim=*/true);
-    if (touchPress || boardPress) {
+    if (touchPress) {
       buzzerPlayClick();
       ledOnUserInteraction();
       nightWake();
@@ -744,7 +639,7 @@ static void handleWakeButton() {
   // No hold gesture in use: take the ORIGINAL press-edge path (with the
   // multi-click shim). holdConsumed is always false here.
   if (!holdLed && !holdAms) {
-    if (touchPress || boardPress) {
+    if (touchPress) {
       buzzerPlayClick();
       ledOnUserInteraction();
       registerTap();
@@ -753,7 +648,7 @@ static void handleWakeButton() {
   }
 
   // A hold gesture is in use: tap/hold disambiguation, the tap fires on release.
-  if (touchPress || boardPress) {
+  if (touchPress) {
     // Press edge - immediate feedback (preserves today's snappy feel).
     buzzerPlayClick();
     ledOnUserInteraction();
@@ -771,8 +666,8 @@ static void handleWakeButton() {
   }
 }
 
-// Accessor for the renderer (display_ui.cpp). Read-only snapshot; never mutates
-// the confirm state. offline is read live for the badge only.
+// Accessor for the mono renderer (mono_display.cpp). Read-only snapshot; never
+// mutates the confirm state. offline is read live for the badge only.
 bool powerConfirmGetView(PowerConfirmView* out) {
   if (!out || getScreenState() != SCREEN_POWER_CONFIRM) return false;
   out->name      = printers[pcSlot].config.name;
@@ -806,36 +701,6 @@ static void handlePowerConfirmService() {
       pcPhase = PC_WAIT_RELEASE;
     }
   }
-}
-
-static void handleBoardPowerOff() {
-#if defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)
-  bool leftPressed = (digitalRead(BOARD_BTN_1) == LOW);
-  bool rightPressed = (digitalRead(BOARD_BTN_3) == LOW);
-
-  if (!leftPressed || !rightPressed) {
-    boardShutdownHoldStart = 0;
-    return;
-  }
-
-  if (boardShutdownHoldStart == 0) {
-    boardShutdownHoldStart = millis();
-    return;
-  }
-
-  if (millis() - boardShutdownHoldStart < 1500) return;
-
-  Serial.println("Power off requested by built-in buttons");
-  setBacklight(0);
-  delay(50);
-
-  // Drive BAT_EN low and hold it through deep sleep
-  digitalWrite(BAT_EN, LOW);
-  gpio_hold_en((gpio_num_t)BAT_EN);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-  delay(200);
-  esp_deep_sleep_start();
-#endif
 }
 
 static void handleDisplayedPrinterFinishState(ScreenState current, BambuState& s) {
@@ -962,7 +827,7 @@ static void updateDisplayedPrinterScreenState() {
 
   // Printer error detail is sticky for its window: hold it against the auto
   // state machine until the user taps out, the error clears, or the window runs
-  // down. Above camera and the drying peek so neither steals it; below OTA and
+  // down. Above the drying peek so it does not steal it; below OTA and
   // power-confirm, which both outrank it. Not the only expiry check -
   // handleDisplaySleepTimeouts() runs even when WiFi is down, where this
   // function is never called at all.
@@ -979,17 +844,6 @@ static void updateDisplayedPrinterScreenState() {
     closeHmsScreen();
     return;
   }
-
-#if BOARD_HAS_CAMERA
-  // Camera fullscreen (#120) is sticky: entered/exited only by tap. Hold it
-  // until the user taps out or the printer can no longer stream, then drop back
-  // to the normal flow (which re-derives the screen next loop).
-  if (current == SCREEN_CAMERA) {
-    if (cameraCanStreamDisplayedPrinter()) return;
-    setScreenState(SCREEN_PRINTING);
-    return;
-  }
-#endif
 
   // AMS drying peek (#150) is sticky for its timeout: hold it against the auto
   // state machine, then drop back and let the normal flow re-derive next loop.
@@ -1562,22 +1416,6 @@ static void handleRotation() {
 
 // ---------------------------------------------------------------------------
 void setup() {
-#if defined(BAT_EN)
-  // Waveshare ESP32-S3-Touch-LCD-1.54 needs BAT_EN high to keep running
-  // after releasing the center PWR button when booting from battery.
-  gpio_hold_dis((gpio_num_t)BAT_EN);  // release hold from previous deep sleep
-  pinMode(BAT_EN, OUTPUT);
-  digitalWrite(BAT_EN, HIGH);
-#endif
-#if defined(BOARD_BTN_1)
-  pinMode(BOARD_BTN_1, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_2)
-  pinMode(BOARD_BTN_2, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_3)
-  pinMode(BOARD_BTN_3, INPUT_PULLUP);
-#endif
   Serial.begin(115200);
   Serial.printf("\n=== BambuHelper %s Starting ===\n", FW_VERSION);
 
@@ -1587,7 +1425,6 @@ void setup() {
 #endif
   recordBootSlotVersion();  // names this slot's fw for the OTA rollback UI
   initDisplay();
-  Battery::begin();
   splashEnd = millis() + 2000;
   startWiFiDuringSplash();
   setBacklight(brightness);
@@ -1595,7 +1432,7 @@ void setup() {
 
 void loop() {
   if (handleSplashPhase()) {
-    flushFrame();  // commit splash draws to panel (no-op on non-JC boards)
+    flushFrame();  // no-op on mono: splash draws go straight to the OLED
     return;
   }
 #ifdef BOARD_IS_MONO
@@ -1620,7 +1457,6 @@ void loop() {
   handleWiFi();
   handleWebServer();
   ssdpTick();  // closes SSDP scan sockets when the window elapses (no-op otherwise)
-  handleBoardPowerOff();
   handleWakeButton();
 
   if (isWiFiConnected() && !isAPMode()) {
@@ -1637,7 +1473,6 @@ void loop() {
   handleBedCooldownBuzzers();
 
   buzzerTick();
-  Battery::tick();
   // LED follows the panel into sleep: any path into SCREEN_OFF (after-finish
   // "turn display off", printer powered off) suspends the status LED; any wake
   // restores it. Synced on the boundary crossing only.
@@ -1662,22 +1497,6 @@ void loop() {
   ledTick();
   checkNightMode();
 
-#if BOARD_HAS_CAMERA
-  // Camera (#120) lifecycle (cheap, non-blocking): open the 2nd TLS socket only
-  // while the camera UI is on screen (fullscreen, or printing screen with a
-  // visible camera tile) and the printer can stream; close it otherwise so heap
-  // returns to baseline, or if rotation moved the displayed printer out from
-  // under an open stream. The blocking socket work runs in the tail below.
-  {
-    bool wantCamera = cameraCanStreamDisplayedPrinter() &&
-        (getScreenState() == SCREEN_CAMERA ||
-         (getScreenState() == SCREEN_PRINTING && cameraDisplayedHasCameraTile()));
-    if (cameraActive() && (!wantCamera || !cameraStreamingDisplayed())) cameraStop();
-    if (wantCamera && !cameraActive())                                  cameraBegin();
-  }
-#endif
-
-  thumbService();
   updateDisplay();
 
   // MQTT and rotation after display update - TLS reconnect can block for
@@ -1686,29 +1505,18 @@ void loop() {
   // and a concurrent second TLS session to Bambu Cloud is unsupported.
   if (isWiFiConnected() && !isAPMode() && isAnyPrinterConfigured() && !isOtaAutoInProgress()) {
     handleBambuMqtt();
-    // Freeze auto-rotation while the camera fullscreen or the power-confirm modal
-    // is up so the displayed printer (and its stream / target) does not drift.
-    if (getScreenState() != SCREEN_CAMERA &&
-        getScreenState() != SCREEN_POWER_CONFIRM &&
+    // Freeze auto-rotation while the power-confirm modal is up so the
+    // displayed printer (and its target) does not drift.
+    if (getScreenState() != SCREEN_POWER_CONFIRM &&
         getScreenState() != SCREEN_HMS &&
         getScreenState() != SCREEN_DRY_PEEK) handleRotation();
   }
 
-  // Commit the framebuffer sprite to the panel. On JC3248W535 this is a
-  // ~20ms QSPI push (300 KB @ 32MHz QIO); on all other boards it's a no-op
-  // since draws go directly to the panel.
+  // Commit the frame to the panel. No-op on mono, since draws go straight to
+  // the OLED.
   flushFrame();
 
   // Plug power-confirm (#136): fire the blocking relay command only after the
-  // "Sending..." frame is committed, and time out the result flash. Runs after
-  // flushFrame() for the same reason cameraService() does.
+  // "Sending..." frame is committed, and time out the result flash.
   handlePowerConfirmService();
-
-#if BOARD_HAS_CAMERA
-  // Blocking camera socket work (connect can stall up to the TLS timeout) runs
-  // dead last - AFTER flushFrame() - so on the framebuffer board (JC3248W535,
-  // where draws are only visible once pushed) a stalled connect never delays the
-  // already-rendered frame, only the start of the next loop.
-  cameraService();
-#endif
 }

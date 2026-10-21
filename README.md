@@ -1,6 +1,6 @@
-# BambuHelper-Mono
+# BambuHelper-OLED
 
-![BambuHelper-Mono running on a 3D-printed terminal case](img/sh1106_128x64_oled.jpg)
+![BambuHelper-OLED running on a 3D-printed terminal case](img/sh1106_128x64_oled.jpg)
 
 A fork of [BambuHelper](https://github.com/Keralots/BambuHelper) that turns an **ESP32-C3 SuperMini + SH1106 128×64 monochrome OLED** into a tiny, always-on Bambu Lab print monitor.
 
@@ -12,20 +12,20 @@ A fork of [BambuHelper](https://github.com/Keralots/BambuHelper) that turns an *
 
 ## Why this fork?
 
-Upstream BambuHelper is built around colour TFT panels. Its display layer (LovyanGFX / TFT_eSPI, gauge layouts, cards, animations) assumes a much larger, colour screen, so adding a 128×64 monochrome OLED there would have meant reshaping the whole display architecture.
+Upstream BambuHelper is built around colour TFT panels. Its display layer (LovyanGFX / TFT_eSPI, gauge layouts, cards, animations, camera thumbnails) assumes a much larger, colour screen, so adding a 128×64 monochrome OLED there would have meant reshaping the whole display architecture.
 
-This fork keeps the mono work self-contained in a separate display path:
+This fork replaces that layer rather than keeping it alongside the mono one: the colour renderers, layouts, fonts, TFT configuration and camera/thumbnail code have been removed, and only the mono path is compiled. What remains is:
 
 | File | Purpose |
 |---|---|
 | `src/mono_display.h` / `.cpp` | Screen selection, layout, drawing and change detection |
 | `src/mono_weather.h` / `.cpp` | OpenWeatherMap fetch/cache for the idle clock |
 | `include/mono_weather_icons.h` | 30×30 weather bitmaps |
-| `platformio.ini` (`mono-c3`) | Dedicated PlatformIO environment (`BOARD_IS_MONO`) |
+| `platformio.ini` (`sh1106_esp32c3`) | Dedicated PlatformIO environment (`BOARD_IS_MONO`) |
 
 **Original repository:** [github.com/Keralots/BambuHelper](https://github.com/Keralots/BambuHelper)
 
-This fork tracks upstream **v3.9.0**. Mono-specific changes only; for the full upstream feature set and cloud/security notes, see the original repository.
+This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path. For the full upstream feature set and cloud/security notes, see the original repository.
 
 ## Hardware
 
@@ -45,7 +45,7 @@ This fork tracks upstream **v3.9.0**. Mono-specific changes only; for the full u
 | SDA | GPIO8 |
 | SCL | GPIO9 |
 
-- I2C address `0x3C` by default. Modules strapped to `0x3D` work by adding `-D OLED_I2C_ADDR=0x3D` to the `mono-c3` env.
+- I2C address `0x3C` by default. Modules strapped to `0x3D` work by adding `-D OLED_I2C_ADDR=0x3D` to the `sh1106_esp32c3` env.
 - No reset pin is used (`OLED_RESET=-1`); the I2C bus runs at 400 kHz.
 - Only four wires are needed. Make sure VCC is **3.3 V**, never 5 V.
 
@@ -63,12 +63,12 @@ This fork tracks upstream **v3.9.0**. Mono-specific changes only; for the full u
 ### First flash (USB)
 
 ```bash
-git clone https://github.com/alejandrosnz/BambuHelper.git
-cd BambuHelper
+git clone https://github.com/alejandrosnz/BambuHelper-OLED.git
+cd BambuHelper-OLED
 
-pio run -e mono-c3                  # build
-pio run -e mono-c3 -t upload        # flash over USB
-pio run -e mono-c3 -t monitor       # serial console, 115200 baud
+pio run -e sh1106_esp32c3                  # build
+pio run -e sh1106_esp32c3 -t upload        # flash over USB
+pio run -e sh1106_esp32c3 -t monitor       # serial console, 115200 baud
 ```
 
 If the upload cannot connect, hold **BOOT** while plugging the board in, then retry.
@@ -76,7 +76,7 @@ If the upload cannot connect, hold **BOOT** while plugging the board in, then re
 ### Updates
 
 - **OTA from the web UI:** WiFi & System → Firmware update (GitHub Releases or a manual `.bin`)
-- **USB:** repeat `pio run -e mono-c3 -t upload`
+- **USB:** repeat `pio run -e sh1106_esp32c3 -t upload`
 
 Settings are stored in NVS and survive OTA updates.
 
@@ -152,7 +152,7 @@ TFT-only sections (Display, After print, Colors, Hardware, Power) are hidden aut
 
 - **1 printer only** — the C3 has no PSRAM and the mono layer targets a single printer.
 - **No touch, buttons or backlight** — the four-wire OLED has none; the clock/screensaver handles idle display.
-- **Monochrome 128×64 only** — the TFT gauge/card layouts do not apply.
+- **Monochrome 128×64 only** — the upstream colour TFT display layer is not part of this build.
 - **HMS text is not embedded on the C3** — the OLED shows the code, the web portal resolves the full sentence.
 - **ArduinoJson v7** is pinned for this fork; the upstream parser rewrite is not included.
 

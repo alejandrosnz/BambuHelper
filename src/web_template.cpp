@@ -335,240 +335,62 @@ static bool resolvePlaceholder(const char* name, String& out) {
     };
     out  = "<div class=\"field\"><label for=\"gtap\">Tap</label>";
     out += "<select id=\"gtap\" onchange=\"toggleSetting('gtap',this.value)\">";
-    opt(dispSettings.gestTap, GT_SMART, "Smart cycle (errors, camera, drying, AMS, next printer)");
+    opt(dispSettings.gestTap, GT_SMART, "Smart cycle (errors, drying, next printer)");
     opt(dispSettings.gestTap, GT_NEXT,  "Next printer only");
-#if HAS_CARD_SKIN
-    opt(dispSettings.gestTap, GT_AMS,   "Switch status / AMS page", true);
-#endif
     opt(dispSettings.gestTap, GT_WAKE,  "Wake the screen only");
     out += "</select></div>";
     out += "<div class=\"field\"><label for=\"gdbl\">Double tap</label>";
     out += "<select id=\"gdbl\" onchange=\"toggleSetting('gdbl',this.value)\">";
     opt(dispSettings.gestDouble, GD_OFF,  "Nothing");
     opt(dispSettings.gestDouble, GD_PLUG, "Plug power on/off (confirm screen)");
-#if HAS_CARD_SKIN
-    opt(dispSettings.gestDouble, GD_AMS,  "Switch status / AMS page", true);
-#endif
     opt(dispSettings.gestDouble, GD_NEXT, "Next printer");
     out += "</select><span class=\"text-dim small\">With a double tap set, a single tap waits ~0.5 s for a second one.</span></div>";
     out += "<div class=\"field\"><label for=\"ghold\">Hold</label>";
     out += "<select id=\"ghold\" onchange=\"toggleSetting('ghold',this.value)\">";
     opt(dispSettings.gestHold, GH_LED,  "Status LED brightness");
-#if HAS_CARD_SKIN
-    opt(dispSettings.gestHold, GH_AMS,  "Switch status / AMS page", true);
-#endif
     opt(dispSettings.gestHold, GH_NONE, "Nothing");
     out += "</select>";
-#if TOUCH_WAKE_LONGPRESS
-    out += "<span class=\"text-dim small\">This touchscreen often reads a wake touch as a hold.</span>";
-#endif
     out += "</div>";
-#if HAS_CARD_SKIN
-    out += "<div class=\"help-text\" id=\"gestAmsNote\"><em>Switch status / AMS page</em> shows the other view on Ready and Print complete for 30 s.</div>";
-#endif
     return true;
   }
   if (strcmp(name, "AMST_ROW") == 0) {
-    // Per-tray filament-type labels only render in the enhanced portrait AMS
-    // strip, and only 320x480 (Guition / ws_lcd_350) drives the 3-AMS case
-    // where the labels get too cramped to read. On 240x320 the 3-AMS view
-    // never enters the enhanced layout, so the toggle would be a no-op there.
-    // Gate the row to the layouts where it actually does something.
-#if defined(DISPLAY_320x480)
-    out  = "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"amst\" value=\"1\" ";
-    out += dispSettings.amsTrayTypes ? "checked" : "";
-    out += " onchange=\"toggleSetting('amst',this.checked)\">";
-    out += "<label for=\"amst\">Show filament type under AMS bars</label>";
-    out += "</label>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "PANEL_CARD_DISP") == 0) {
-    // Hardware > Display panel holds only the 240x320 rows below.
-#if defined(DISPLAY_240x320)
-    out = "";
-#else
     out = "display:none";
-#endif
     return true;
   }
   if (strcmp(name, "INVCOL_ROW") == 0) {
-#if defined(DISPLAY_240x320)
-    out  = "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"invcol\" value=\"1\" ";
-    out += dispSettings.invertColors ? "checked" : "";
-    out += " onchange=\"toggleSetting('invcol',this.checked)\">";
-    out += "<label for=\"invcol\">Invert display colors (fix white background)</label>";
-    out += "</label>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "CYD_PANEL_ROW") == 0) {
-#if defined(DISPLAY_CYD)
-    out  = "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"cydcls\" value=\"1\" ";
-    out += dispSettings.cydPanelClassic ? "checked" : "";
-    out += " onchange=\"toggleSetting('cydcls',this.checked)\">";
-    out += "<label for=\"cydcls\">Use Classic CYD panel fallback (older units only - device will reboot)</label>";
-    out += "</label>";
-    out += "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"cyd32e\" value=\"1\" ";
-    out += dispSettings.cyd32eVariant ? "checked" : "";
-    out += " onchange=\"toggleSetting('cyd32e',this.checked)\">";
-    out += "<label for=\"cyd32e\">ESP32-32E clone board (fixes silent speaker + stuck red LED - device will reboot)</label>";
-    out += "</label>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "CARD_SKIN_ROW") == 0) {
-#if HAS_CARD_SKIN
-    // Print-screen style + its two options. Same /save/toggle path
-    // as the round skin picker.
-    auto opt = [&](String& o, uint8_t cur, uint8_t v, const char* label) {
-      o += "<option value=\""; o += v; o += "\""; if (cur == v) o += " selected";
-      o += ">"; o += label; o += "</option>";
-    };
-    out  = "<div class=\"field\"><label for=\"card\">Print screen style</label>";
-    out += "<select id=\"card\" onchange=\"toggleSetting('card',this.value);applyCardsHints()\">";
-    opt(out, dispSettings.cardStyle, 0, "Gauges");
-    opt(out, dispSettings.cardStyle, 1, "Cards (beta)");
-    out += "</select>";
-    out += "<span class=\"text-dim small\">Settings that only apply to Gauges are hidden while Cards is picked; split view keeps the gauges.</span></div>";
-    out += "<div id=\"cardOpts\">";
-    out += "<div class=\"field\"><label for=\"cleft\">Card: left column</label>";
-    out += "<select id=\"cleft\" onchange=\"toggleSetting('cleft',this.value)\">";
-    opt(out, dispSettings.cardLeft, 0, "AMS slots");
-    opt(out, dispSettings.cardLeft, 1, "None");
-#if HAS_CARD_THUMB
-    opt(out, dispSettings.cardLeft, 2, "Plate preview (Bambu cloud sign-in, else AMS)");
-#endif
-    out += "</select></div>";
-    out += "<div class=\"field\"><label for=\"cbot\">Card: bottom row</label>";
-    out += "<select id=\"cbot\" onchange=\"toggleSetting('cbot',this.value)\">";
-    opt(out, dispSettings.cardBottom, 0, "Temperatures");
-    opt(out, dispSettings.cardBottom, 1, "Filaments of this print");
-    out += "</select></div>";
-    out += "<div class=\"field\"><label for=\"cready\">Card: Ready screen</label>";
-    out += "<select id=\"cready\" onchange=\"toggleSetting('cready',this.value)\">";
-    opt(out, dispSettings.cardReady, 0, "Status");
-    opt(out, dispSettings.cardReady, 1, "AMS filament left");
-    opt(out, dispSettings.cardReady, 2, "Alternate status / AMS");
-    out += "</select>";
-    out += "<span class=\"text-dim small\">A tap or the status / AMS gesture shows the other view for 30 s.</span></div>";
-    out += "</div>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "ROUND_SKIN_ROW") == 0) {
-#if DISPLAY_IS_ROUND
-    // Round boards only: printing dashboard skin picker. Posts through the
-    // same /save/toggle endpoint as the checkboxes (val carries 0-2).
-    auto sel = [&](uint8_t v) { return dispSettings.roundSkin == v ? " selected" : ""; };
-    out  = "<div class=\"field\"><label for=\"rskin\">Print dashboard skin</label>";
-    out += "<select id=\"rskin\" onchange=\"toggleSetting('rskin',this.value)\">";
-    out += "<option value=\"0\""; out += sel(0); out += ">Rim (progress ring + mini gauges)</option>";
-    out += "<option value=\"1\""; out += sel(1); out += ">Speedo (large 240&deg; arc)</option>";
-    out += "<option value=\"2\""; out += sel(2); out += ">Rings (concentric progress/nozzle/bed)</option>";
-    out += "</select>";
-    out += "</div>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "EXTENDED_MODES_CARD") == 0) {
-    // Card lives in the Print screen section. Only renders on layouts that
-    // actually have extended grid modes, otherwise the whole card is empty.
-#if defined(DISPLAY_240x320) || defined(DISPLAY_320x480)
-    out  = "<div class=\"card\" data-gauges-only>";  // Cards never reads l8s/p9s
-    out += "<div class=\"card-head\"><div><h3>Extended grid modes</h3>";
-    out += "<p>Trade the on-screen AMS area for extra gauge slots. ";
-    out += "Configure the new slots under <strong>Gauge Layout</strong>.</p>";
-    out += "</div></div>";
-    out += "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"l8s\" value=\"1\" ";
-    out += dispSettings.landscape8Slots ? "checked" : "";
-    out += " onchange=\"toggleGridMode('l8s', this.checked)\">";
-    out += "<label for=\"l8s\">Landscape 8 gauge slots (replaces AMS sidebar with a 2x4 grid)</label>";
-    out += "</label>";
-    out += "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"p9s\" value=\"1\" ";
-    out += dispSettings.portrait9Slots ? "checked" : "";
-    out += " onchange=\"toggleGridMode('p9s', this.checked)\">";
-    out += "<label for=\"p9s\">Portrait 9 gauge slots (replaces AMS strip with a 3x3 grid)</label>";
-    out += "</label>";
-    out += "</div>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "EXTRAS_SECTIONS") == 0) {
-    // Two independent extras blocks - landscape col 4 + portrait row 3.
-    // Each is gauge-type-configured per-printer through landscapeExtras /
-    // portraitExtras. Boards without LAYOUT_HAS_LANDSCAPE / LY_PORT9_GAUGE_R
-    // don't render anything here so the user isn't offered settings the
-    // device can't use. Inline display:none reflects the toggle's state at
-    // render time; toggleGridMode() in the Print screen section keeps it in sync.
-#if defined(DISPLAY_240x320) || defined(DISPLAY_320x480)
-    out  = "<div id=\"landExtrasGroup\"";
-    if (!dispSettings.landscape8Slots) out += " style=\"display:none\"";
-    out += "><div class=\"row-divider\">&#9656; Landscape extras (column 4, used by <em>Landscape 8 slots</em>)</div>";
-    out += "<div class=\"gauge-grid\">";
-    out += "<div class=\"cell\"><label>Col 4 top</label><select id=\"lx0\" class=\"gauge-slot-sel\"></select></div>";
-    out += "<div class=\"cell\"><label>Col 4 bot</label><select id=\"lx1\" class=\"gauge-slot-sel\"></select></div>";
-    out += "</div></div>";
-    out += "<div id=\"portExtrasGroup\"";
-    if (!dispSettings.portrait9Slots) out += " style=\"display:none\"";
-    out += "><div class=\"row-divider\">&#9656; Portrait extras (row 3, used by <em>Portrait 9 slots</em>)</div>";
-    out += "<div class=\"gauge-grid\">";
-    out += "<div class=\"cell\"><label>Row 3 left</label><select id=\"px0\" class=\"gauge-slot-sel\"></select></div>";
-    out += "<div class=\"cell\"><label>Row 3 mid</label><select id=\"px1\" class=\"gauge-slot-sel\"></select></div>";
-    out += "<div class=\"cell\"><label>Row 3 right</label><select id=\"px2\" class=\"gauge-slot-sel\"></select></div>";
-    out += "</div></div>";
-#else
     out = "";
-#endif
     return true;
   }
   if (strcmp(name, "PONG_DISP") == 0) {
-    // Inline style for the Breakout-clock row. The game plays in a rectangle;
-    // on round panels the walls and corner bricks sit outside the visible
-    // circle, so the firmware never runs it there (display_ui always draws
-    // the watch-face clock) and the option is hidden.
-#if DISPLAY_IS_ROUND
-    out = "display:none";
-#else
     out = "";
-#endif
-    return true;
-  }
-  if (strcmp(name, "BOARDBTN") == 0) {
-    // JS board flag: an onboard button works whatever "Button type" says.
-#if defined(BOARD_BTN_1)
-    out = "1";
-#else
-    out = "0";
-#endif
     return true;
   }
   if (strcmp(name, "ISROUND") == 0) {
-    // JS board flag: the Gauge Layout card re-labels itself for round boards
-    // (3 Rim-skin mini slots, no bottom row / AMS view / extras).
-#if DISPLAY_IS_ROUND
-    out = "1";
-#else
     out = "0";
-#endif
     return true;
   }
   if (strcmp(name, "HMSFULL") == 0) {
@@ -585,17 +407,10 @@ static bool resolvePlaceholder(const char* name, String& out) {
     return true;
   }
   if (strcmp(name, "AMSV_ROW") == 0) {
-    // AMS view swaps gauge row 2 for the AMS strip - 240x240 square boards
-    // only. Round boards have no AMS strip, big boards show AMS natively.
-#if !defined(DISPLAY_240x320) && !defined(DISPLAY_320x480) && \
-    !defined(DISPLAY_480x480) && !DISPLAY_IS_ROUND
     out  = "<label class=\"check-row\">";
     out += "<input type=\"checkbox\" id=\"amsv\" value=\"1\" onchange=\"syncAmsView()\">";
     out += "<label for=\"amsv\">AMS view (replaces bottom gauges)</label>";
     out += "</label>";
-#else
-    out = "";
-#endif
     return true;
   }
 
@@ -715,24 +530,12 @@ static bool resolvePlaceholder(const char* name, String& out) {
   if (strcmp(name, "BTN_OFF") == 0)    { out = buttonType == BTN_DISABLED ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_PUSH") == 0)   { out = buttonType == BTN_PUSH ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_TOUCH") == 0)  { out = buttonType == BTN_TOUCH ? "selected" : ""; return true; }
-  if (strcmp(name, "BTN_SCREEN") == 0) { out = buttonType == BTN_TOUCHSCREEN ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_PIN") == 0)    { out = String(buttonPin); return true; }
 
   // --- Buzzer ---
   if (strcmp(name, "BUZ_OFF") == 0) { out = buzzerSettings.enabled ? "" : "selected"; return true; }
   if (strcmp(name, "BUZ_ON") == 0)  { out = buzzerSettings.enabled ? "selected" : ""; return true; }
   if (strcmp(name, "BUZ_PIN") == 0) { out = String(buzzerSettings.pin); return true; }
-  if (strcmp(name, "FIXED_AUDIO") == 0) {
-    // "1" when the sound hardware is wired, not chosen: an I2S codec/amp, or
-    // an IO-expander bit. Either way the portal must not ask for a GPIO.
-#if defined(BOARD_HAS_ES8311_AUDIO) || defined(BOARD_HAS_NS4168_AUDIO) || \
-    BUZZER_BACKEND_TCA9554
-    out = "1";
-#else
-    out = "0";
-#endif
-    return true;
-  }
   if (strcmp(name, "BUZ_QS") == 0)        { out = String(buzzerSettings.quietStartHour); return true; }
   if (strcmp(name, "BUZ_QE") == 0)        { out = String(buzzerSettings.quietEndHour); return true; }
   if (strcmp(name, "BUZ_CLICK") == 0)     { out = buzzerSettings.buttonClick ? "checked" : ""; return true; }
@@ -775,45 +578,6 @@ static bool resolvePlaceholder(const char* name, String& out) {
   if (strcmp(name, "LED_C_PAUSE") == 0) { out = ledHexColor(ledSettings.colorPaused);   return true; }
   if (strcmp(name, "LED_C_FIN")   == 0) { out = ledHexColor(ledSettings.colorFinished); return true; }
   if (strcmp(name, "LED_C_ERR")   == 0) { out = ledHexColor(ledSettings.colorError);    return true; }
-  // Shortcut that fills the pin fields with the board's own onboard RGB wiring.
-  // Emitted as a block rather than inline markup because PAGE_HTML is one raw
-  // string literal - a #if inside it would ship as literal text. The pin values
-  // are resolved per render: on the CYD the red pin follows the ESP32-32E
-  // runtime variant.
-  if (strcmp(name, "LED_ONBOARD_ROW") == 0) {
-#if BOARD_HAS_ONBOARD_RGB
-    uint8_t r = 0, g = 0, b = 0; bool anode = false;
-    onboardRgbPins(r, g, b, anode);
-    out  = "<div id=\"ledOnboard\" class=\"field\" data-r=\"" + String(r) + "\"";
-    out += " data-g=\"" + String(g) + "\" data-b=\"" + String(b) + "\"";
-    out += " data-anode=\"" + String(anode ? "1" : "0") + "\"";
-    out += " data-drv=\"" + String((int)(BOARD_HAS_ONBOARD_RGB_PIXEL ? LED_DRV_PIXEL : LED_DRV_RGB)) + "\">";
-    out += "<button type=\"button\" class=\"btn btn-ghost btn-sm\" onclick=\"ledUseOnboard()\">";
-    out += "Use this board's onboard RGB LED</button></div>";
-#else
-    out = "";
-#endif
-    return true;
-  }
-
-  // --- Battery indicator (Waveshare boards only) ---
-  if (strcmp(name, "BAT_TOGGLE_ROW") == 0) {
-#if defined(BOARD_HAS_BATTERY)
-    out  = "<div class=\"card\">";
-    out += "<div class=\"card-head\"><div><h3>Battery indicator</h3>";
-    out += "<p>For boards with a battery wired. Shows charge state on the display.</p></div></div>";
-    out += "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"batshow\"";
-    if (dispSettings.showBatteryIndicator) out += " checked";
-    out += "><label for=\"batshow\">Show battery indicator</label>";
-    out += "</label>";
-    out += "<div class=\"hint\" style=\"padding-left:28px;margin-top:-4px\">Hide if your board has no battery wired (avoids phantom readings).</div>";
-    out += "</div>";
-#else
-    out = "";
-#endif
-    return true;
-  }
 
   // --- Tasmota power monitoring ---
   if (strcmp(name, "POWER_TAB_2") == 0) {

@@ -1,8 +1,8 @@
-// BambuHelper-Mono: display layer for the SH1106 128x64 over I2C.
+// BambuHelper-OLED: display layer for the SH1106 128x64 over I2C.
 // Style copied from ESP-Spotify-OLED:
 // Adafruit_SH1106G, FreeMonoBold9pt7b for the title, default font for the
 // rest, bar via drawRect+fillRect, hand-drawn bitmap icons, transliterated names.
-// Only exists with BOARD_IS_MONO (mono-c3 env).
+// Only exists with BOARD_IS_MONO (sh1106_esp32c3 env).
 //
 // Data model (plan step 1): there is NO dedicated PrinterState struct.
 // BambuState (include/bambu_state.h) already carries every requested field

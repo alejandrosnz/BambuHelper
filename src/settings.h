@@ -38,8 +38,8 @@ enum GaugeType : uint8_t {
   GAUGE_NOZZLE_RIGHT   = 29,    // dual-nozzle (H2D/H2C/X2D): right extruder (id 0), fixed side
   GAUGE_NOZZLE_LEFT    = 30,    // dual-nozzle: left extruder (id 1), fixed side
   GAUGE_POWER          = 31,    // Tasmota smart-plug live power draw (W / kW)
-  GAUGE_CAMERA         = 32,    // P1/A1 LAN chamber-image thumbnail (PSRAM+touch boards)
-  GAUGE_PLATE          = 33,    // plate preview of the current cloud job (HAS_CARD_THUMB)
+  GAUGE_CAMERA         = 32,    // reserved: LAN chamber-image thumbnail (colour builds)
+  GAUGE_PLATE          = 33,    // plate preview of the current cloud job
   GAUGE_TYPE_COUNT  // sentinel - always last
 };
 
@@ -54,8 +54,8 @@ static const uint8_t PORTRAIT_EXTRA_COUNT  = 3;  // row 3 left, mid, right
 // own slots so they can differ from the print-screen grid (e.g. chamber temp
 // while a part cools). Shared by both screens - they never appear together.
 static const uint8_t IDLE_SLOT_COUNT = 2;        // left, right
-// Max slots displayed by any mode at once. Used to size per-frame slot caches
-// in display_ui.cpp (prevSlotTypes, SlotGrid arrays).
+// Max slots displayed by any mode at once. Used to size the per-frame slot
+// caches of the gauge renderers.
 static const uint8_t GAUGE_SLOT_MAX = GAUGE_SLOT_COUNT + PORTRAIT_EXTRA_COUNT;  // 9
 
 // Per-gauge color config
@@ -84,19 +84,15 @@ struct DisplaySettings {
   bool     fanMatchPrinter;   // round fan % to 10% steps to match printer LCD (else 1% precision from fan_gear)
   bool     hideStatusReadout; // hide the printing status-bar center layer/power readout (redundant when shown as gauges); frees width for the filament name
   bool     invertColors;   // invert display colors (fixes white-bg on some panels)
-  bool     cydPanelClassic; // CYD only: use plain Panel_ILI9341 (no inversion)
-                            // instead of Panel_ILI9341_2 — for the other
-                            // hardware revision that shows mirrored image.
-  bool     cyd32eVariant;   // CYD only: 2.8" ESP32-32E clone (lcdwiki) with a
-                            // shuffled pinout - speaker amp enable on GPIO4
-                            // (classic: red LED) and red LED on GPIO22. Enables
-                            // the amp while the buzzer is on and parks the
-                            // moved RGB LED off at boot.
+  bool     cydPanelClassic; // retained for NVS compatibility; unused by the
+                            // mono renderer (CYD: plain Panel_ILI9341 revision).
+  bool     cyd32eVariant;   // retained for NVS compatibility; unused by the
+                            // mono renderer (CYD: 2.8" ESP32-32E clone pinout).
   uint8_t  roundSkin;       // round displays only: printing dashboard skin.
                             // 0 = Rim (rim progress ring + mini gauges),
                             // 1 = Speedo (one large 240-degree arc),
                             // 2 = Rings (concentric progress/nozzle/bed).
-  uint8_t  cardStyle;       // HAS_CARD_SKIN, landscape only: 0 = gauges, 1 = Card
+  uint8_t  cardStyle;       // colour card layout: 0 = gauges, 1 = Card
   uint8_t  cardLeft;        // Card left column: 0 = AMS slots, 1 = none, 2 = plate preview (cloud)
   uint8_t  cardBottom;      // Card bottom band: 0 = temperatures, 1 = print filaments
   uint8_t  cardReady;       // Card Ready screen: 0 = status, 1 = AMS page, 2 = alternate
@@ -115,7 +111,6 @@ struct DisplaySettings {
   uint8_t  gestTap;            // single tap:  GT_SMART / GT_NEXT / GT_AMS / GT_WAKE
   uint8_t  gestDouble;         // double tap:  GD_OFF / GD_PLUG / GD_AMS / GD_NEXT
   uint8_t  gestHold;           // hold:        GH_LED / GH_AMS / GH_NONE
-  bool     showBatteryIndicator; // Waveshare boards: show battery icon in status bar
   // Edge glow: animated border light announcing print complete / print failed
   uint8_t  glowMode;       // 0 = Off, 1 = Single color, 2 = Rainbow
   uint16_t glowColor;      // Single-color mode band color (RGB565)
@@ -194,8 +189,7 @@ struct DisplaySettings {
   uint16_t textDimColor;     // secondary / placeholder text (was 0xC618 gray).
                              // CLR_TEXT_DARK (inactive dots, tracks) stays
                              // fixed - it is chrome, not text. So does the white
-                             // end of a highlight blend: see the CLR_TEXT_DEFAULT
-                             // uses in display_gauges.cpp.
+                             // end of a highlight blend.
   GaugeColors progress;
   GaugeColors nozzle;
   GaugeColors bed;
@@ -292,7 +286,7 @@ struct DisplayPowerSettings {
 };
 
 // Button type
-enum ButtonType : uint8_t { BTN_DISABLED = 0, BTN_PUSH = 1, BTN_TOUCH = 2, BTN_TOUCHSCREEN = 3 };
+enum ButtonType : uint8_t { BTN_DISABLED = 0, BTN_PUSH = 1, BTN_TOUCH = 2 };
 
 // Buzzer settings
 struct BuzzerSettings {
@@ -354,11 +348,9 @@ struct LedSettings {
 };
 
 // Tasmota smart plug power monitoring
-// One plug per printer slot. Single plug on BOARD_LOW_RAM (CYD/tzt_2432/esp32c3):
-// its RAM budget rules out a second, and that plug carries an "assigned printer"
-// selector instead (see TASMOTA_PLUG_COUNT==1 paths). Everywhere else it tracks
-// MAX_ACTIVE_PRINTERS: 2 on full-RAM boards, 4 on PSRAM boards that can run four
-// printers (quadPrinterBeta), so printers 3/4 get power monitoring too.
+// One plug on BOARD_LOW_RAM (the C3): its RAM budget rules out a second, and
+// that plug carries an "assigned printer" selector instead (see
+// TASMOTA_PLUG_COUNT==1 paths). Everywhere else it tracks MAX_ACTIVE_PRINTERS.
 #ifdef BOARD_LOW_RAM
   #define TASMOTA_PLUG_COUNT 1
 #else
@@ -439,7 +431,7 @@ extern bool quadPrinterBeta;
 // C3 antenna workaround (issue #146): true = this board's radio only works at
 // reduced TX power, so every WiFi connect must be capped at 8.5 dBm. Set by
 // wifi_manager when a reduced-power STA attempt succeeds after full-power
-// attempts failed. Only meaningful on BOARD_IS_C3 builds.
+// attempts failed. Meaningful on this ESP32-C3 build only.
 extern bool wifiTxCapped;
 
 void loadSettings();
@@ -455,7 +447,6 @@ void saveRotationSettings();
 void saveButtonSettings();
 void saveBuzzerSettings();
 void saveLedSettings();
-void saveBatteryIndicatorSetting();
 void saveWifiTxCapped();
 void resetSettings();
 
