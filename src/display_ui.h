@@ -1,12 +1,15 @@
 #ifndef DISPLAY_UI_H
 #define DISPLAY_UI_H
 
-#include <LovyanGFX.hpp>
 #include "config.h"   // HAS_HMS_UI, so the error-screen stub can fold away
+
+#ifndef BOARD_IS_MONO
+#include <LovyanGFX.hpp>
 
 // Forward-declare the panel type so callers can use the pointer without
 // pulling in the full header (which includes Arduino_GFX headers).
 namespace lgfx { inline namespace v1 { class Panel_AXS15231B_AGFX; } }
+#endif
 
 enum ScreenState {
   SCREEN_SPLASH,
@@ -96,6 +99,7 @@ uint8_t dryingUnitCount(const AmsState& ams);
 // the unit shown is deterministic rather than a function of wall-clock timing.
 void resetDryingRotation();
 
+#ifndef BOARD_IS_MONO
 extern lgfx::LovyanGFX* tft_ptr;
 // Macro (NOT a reference) so callers' `tft.method()` always dereferences the
 // current value of `tft_ptr`. On JC3248W535 we retarget this pointer to a
@@ -110,6 +114,7 @@ lgfx::LGFX_Device& displayDevice();
 // Direct pointer to the AXS15231B panel wrapper; only non-null on
 // BOARD_IS_JC3248W535 builds. Used by the sprite direct-push diagnostic.
 extern lgfx::Panel_AXS15231B_AGFX* g_axs_panel;
+#endif
 
 void initDisplay();
 void updateDisplay();
