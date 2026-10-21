@@ -749,16 +749,16 @@ function saveWifi(){
 /* ============ Hardware ============ */
 function toggleBtnPin(){
   var v = document.getElementById('btntype').value;
-  document.getElementById('btnPinRow').style.display = (v === '0' || v === '3') ? 'none' : 'block';
+  document.getElementById('btnPinRow').style.display = (v === '0') ? 'none' : 'block';
   toggleBuzPin();
   applyGestureVis();
 }
-/* Gestures card (Display) follows Button type or an onboard button; AMS choices follow the print style.
+/* Gestures card (Display) follows Button type; AMS choices follow the print style.
    An AMS choice already stored stays visible so the select never shows a blank. */
 function applyGestureVis(){
   var card = document.getElementById('gestCard');
   if (!card) return;
-  var on = DEV.boardBtn === '1' || document.getElementById('btntype').value !== '0';
+  var on = document.getElementById('btntype').value !== '0';
   card.style.display = on ? '' : 'none';
   document.getElementById('gestOff').style.display = on ? 'none' : '';
   var cs = document.getElementById('card');
@@ -777,9 +777,7 @@ function applyGestureVis(){
 function toggleBuzPin(){
   var buzOn = document.getElementById('buzzen').value !== '0';
   document.getElementById('buzFields').style.display = buzOn ? 'block' : 'none';
-  var fixedAudio = DEV.fixedAudio === '1';
-  document.getElementById('buzPinRow').style.display = (buzOn && !fixedAudio) ? 'block' : 'none';
-  document.getElementById('buzFixedAudioInfo').style.display = (buzOn && fixedAudio) ? 'block' : 'none';
+  document.getElementById('buzPinRow').style.display = buzOn ? 'block' : 'none';
   var btnOn = document.getElementById('btntype').value !== '0';
   document.getElementById('buzClickRow').style.display = (buzOn && btnOn) ? 'flex' : 'none';
 }
@@ -795,19 +793,6 @@ function toggleLed(){
     drv === '1' ? 'Red GPIO pin' : (drv === '2' ? 'Data GPIO pin' : 'LED GPIO pin');
   toggleLedFx();
   toggleLedErr();
-}
-/* Fills the pin fields from the board's own onboard RGB wiring. The button only
-   exists on boards that have one, so every caller path is guarded on the row. */
-function ledUseOnboard(){
-  var row = document.getElementById('ledOnboard');
-  if (!row) return;
-  document.getElementById('leddrv').value = row.getAttribute('data-drv');
-  document.getElementById('ledpin').value = row.getAttribute('data-r');
-  document.getElementById('ledping').value = row.getAttribute('data-g');
-  document.getElementById('ledpinb').value = row.getAttribute('data-b');
-  document.getElementById('ledanode').checked = row.getAttribute('data-anode') === '1';
-  toggleLed();
-  ledPreviewSend();
 }
 function toggleLedFx(){
   var fx = document.getElementById('ledfxmd');
@@ -900,8 +885,6 @@ function saveHardware(){
   p.append('lederr', document.getElementById('lederr').checked ? '1' : '0');
   p.append('lednight', document.getElementById('lednight').checked ? '1' : '0');
   p.append('lederrsec', document.getElementById('lederrsec').value);
-  var bs = document.getElementById('batshow');
-  if (bs) p.append('batshow', bs.checked ? '1' : '0');
   var clean = dirtySnap('saveHardware');
   fetch('/save/rotation',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
     .then(function(r){return r.json();})

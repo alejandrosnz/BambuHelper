@@ -14,9 +14,6 @@
 #include "display_card.h"       // cardAmsPeekToggle
 #include "hms_lookup.h"
 #include "tasmota.h"
-#include "battery.h"
-#include <esp_sleep.h>
-#include <driver/gpio.h>
 #include <time.h>
 
 #ifdef BOARD_IS_MONO
@@ -37,15 +34,6 @@ static uint8_t finishDryViewSlot = 0xFF;
 static unsigned long connectingScreenStart = 0;  // for stuck-state timeout
 static PrinterGcodeState prevGcodeStateId[MAX_ACTIVE_PRINTERS] = { GCODE_UNKNOWN };
 static bool prevGcodeStateSeen[MAX_ACTIVE_PRINTERS] = { false };
-#if defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)
-static unsigned long boardShutdownHoldStart = 0;
-#endif
-#if defined(BOARD_BTN_1)
-static bool lastBoardBtn = false;
-static bool boardBtnStable = false;
-static unsigned long boardBtnChangeMs = 0;
-static unsigned long boardBtnPressStartMs = 0;
-#endif
 
 // --- Button-driven plug power control (#136) --------------------------------
 static const uint32_t POWER_MULTICLICK_MS         = 450;   // double/triple-click window
@@ -171,53 +159,6 @@ static void cycleDisplayedPrinterFromButton() {
       break;
     }
   }
-}
-
-static bool wasBoardButtonPressed() {
-#if defined(BOARD_BTN_1)
-  bool raw = (digitalRead(BOARD_BTN_1) == LOW);
-  if (raw != lastBoardBtn) {
-    boardBtnChangeMs = millis();
-    lastBoardBtn = raw;
-  }
-  if ((millis() - boardBtnChangeMs) < 50) return false;
-  bool result = false;
-  if (raw && !boardBtnStable) {
-    result = true;
-    boardBtnPressStartMs = millis();
-  } else if (!raw && boardBtnStable) {
-    boardBtnPressStartMs = 0;
-  }
-  boardBtnStable = raw;
-  return result;
-#else
-  return false;
-#endif
-}
-
-static bool isBoardButtonHeld() {
-#if defined(BOARD_BTN_1)
-  return boardBtnStable;
-#else
-  return false;
-#endif
-}
-
-static uint32_t boardButtonHoldDurationMs() {
-#if defined(BOARD_BTN_1)
-  if (!boardBtnStable || boardBtnPressStartMs == 0) return 0;
-  return (uint32_t)(millis() - boardBtnPressStartMs);
-#else
-  return 0;
-#endif
-}
-
-static bool isBoardButton3Held() {
-#if defined(BOARD_BTN_3)
-  return digitalRead(BOARD_BTN_3) == LOW;
-#else
-  return false;
-#endif
 }
 
 // Open the AMS drying peek (#150) for the shown printer, if it has anything to
@@ -593,31 +534,17 @@ static void handlePowerConfirmInput(bool held) {
 }
 
 static void handleWakeButton() {
-  // Both edge pollers MUST be called every loop unconditionally - each owns its
-  // own debounce + held-state machine, and skipping a call would freeze it.
   bool touchPress = wasButtonPressed();
-  bool boardPress = wasBoardButtonPressed();
 
   // Any press acknowledges the edge glow on the raw edge, before tap/hold
   // decoding - the press still performs its normal action below. Armed, not
   // active: a press during the dark reminder pause must cancel the reminder
   // cycle too, not just a band that is currently drawing.
-  if ((touchPress || boardPress) && glowIsArmed()) glowDismiss();
+  if (touchPress && glowIsArmed()) glowDismiss();
 
-  bool held = isButtonHeld() || isBoardButtonHeld();
-  uint32_t touchHoldMs = buttonHoldDurationMs();
-  uint32_t boardHoldMs = boardButtonHoldDurationMs();
-  uint32_t holdMs = (touchHoldMs > boardHoldMs) ? touchHoldMs : boardHoldMs;
-  bool suppressDim = isBoardButton3Held();
-#if TOUCH_WAKE_LONGPRESS
-  // Resistive panels (CYD, TZT) register a wake touch as a long press that
-  // easily crosses the 300ms hold threshold. That would ramp the LED (default
-  // direction is up, toward max), save it, and consume the press so the screen
-  // never wakes. Suppress dimming while asleep so the touch only wakes.
-  // Most capacitive panels get crisp short taps and keep hold-to-dim on the
-  // screensaver, but AXS15231B requires the same suppression as XPT2046.
-  if (isSleepStickyScreen(getScreenState())) suppressDim = true;
-#endif
+  bool held = isButtonHeld();
+  uint32_t holdMs = buttonHoldDurationMs();
+  bool suppressDim = false;
 
   // #177: on the "Printer Off" screen, a hold means power-on (handled below), so
   // suppress LED-dim there - the hold must never start a dim session, whether or
@@ -636,7 +563,7 @@ static void handleWakeButton() {
   // then hand off and return before the normal tap/hold logic.
   if (getScreenState() == SCREEN_POWER_CONFIRM) {
     ledHoldDimUpdate(held, holdMs, /*suppressDim=*/true);
-    if (touchPress || boardPress) { buzzerPlayClick(); ledOnUserInteraction(); }
+    if (touchPress) { buzzerPlayClick(); ledOnUserInteraction(); }
     handlePowerConfirmInput(held);
     wasHeldPrev = held;
     holdConsumedThisPress = false;
@@ -653,7 +580,7 @@ static void handleWakeButton() {
   // starts - a hold in the dark must not ramp the LED and write it to NVS.
   if (isNightBlackout() && !isSleepStickyScreen(getScreenState())) {
     ledHoldDimUpdate(held, holdMs, /*suppressDim=*/true);
-    if (touchPress || boardPress) {
+    if (touchPress) {
       buzzerPlayClick();
       ledOnUserInteraction();
       nightWake();
@@ -712,7 +639,7 @@ static void handleWakeButton() {
   // No hold gesture in use: take the ORIGINAL press-edge path (with the
   // multi-click shim). holdConsumed is always false here.
   if (!holdLed && !holdAms) {
-    if (touchPress || boardPress) {
+    if (touchPress) {
       buzzerPlayClick();
       ledOnUserInteraction();
       registerTap();
@@ -721,7 +648,7 @@ static void handleWakeButton() {
   }
 
   // A hold gesture is in use: tap/hold disambiguation, the tap fires on release.
-  if (touchPress || boardPress) {
+  if (touchPress) {
     // Press edge - immediate feedback (preserves today's snappy feel).
     buzzerPlayClick();
     ledOnUserInteraction();
@@ -774,36 +701,6 @@ static void handlePowerConfirmService() {
       pcPhase = PC_WAIT_RELEASE;
     }
   }
-}
-
-static void handleBoardPowerOff() {
-#if defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)
-  bool leftPressed = (digitalRead(BOARD_BTN_1) == LOW);
-  bool rightPressed = (digitalRead(BOARD_BTN_3) == LOW);
-
-  if (!leftPressed || !rightPressed) {
-    boardShutdownHoldStart = 0;
-    return;
-  }
-
-  if (boardShutdownHoldStart == 0) {
-    boardShutdownHoldStart = millis();
-    return;
-  }
-
-  if (millis() - boardShutdownHoldStart < 1500) return;
-
-  Serial.println("Power off requested by built-in buttons");
-  setBacklight(0);
-  delay(50);
-
-  // Drive BAT_EN low and hold it through deep sleep
-  digitalWrite(BAT_EN, LOW);
-  gpio_hold_en((gpio_num_t)BAT_EN);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-  delay(200);
-  esp_deep_sleep_start();
-#endif
 }
 
 static void handleDisplayedPrinterFinishState(ScreenState current, BambuState& s) {
@@ -1519,22 +1416,6 @@ static void handleRotation() {
 
 // ---------------------------------------------------------------------------
 void setup() {
-#if defined(BAT_EN)
-  // Waveshare ESP32-S3-Touch-LCD-1.54 needs BAT_EN high to keep running
-  // after releasing the center PWR button when booting from battery.
-  gpio_hold_dis((gpio_num_t)BAT_EN);  // release hold from previous deep sleep
-  pinMode(BAT_EN, OUTPUT);
-  digitalWrite(BAT_EN, HIGH);
-#endif
-#if defined(BOARD_BTN_1)
-  pinMode(BOARD_BTN_1, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_2)
-  pinMode(BOARD_BTN_2, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_3)
-  pinMode(BOARD_BTN_3, INPUT_PULLUP);
-#endif
   Serial.begin(115200);
   Serial.printf("\n=== BambuHelper %s Starting ===\n", FW_VERSION);
 
@@ -1544,7 +1425,6 @@ void setup() {
 #endif
   recordBootSlotVersion();  // names this slot's fw for the OTA rollback UI
   initDisplay();
-  Battery::begin();
   splashEnd = millis() + 2000;
   startWiFiDuringSplash();
   setBacklight(brightness);
@@ -1577,7 +1457,6 @@ void loop() {
   handleWiFi();
   handleWebServer();
   ssdpTick();  // closes SSDP scan sockets when the window elapses (no-op otherwise)
-  handleBoardPowerOff();
   handleWakeButton();
 
   if (isWiFiConnected() && !isAPMode()) {
@@ -1594,7 +1473,6 @@ void loop() {
   handleBedCooldownBuzzers();
 
   buzzerTick();
-  Battery::tick();
   // LED follows the panel into sleep: any path into SCREEN_OFF (after-finish
   // "turn display off", printer powered off) suspends the status LED; any wake
   // restores it. Synced on the boundary crossing only.

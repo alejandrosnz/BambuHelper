@@ -121,30 +121,18 @@
 // ALWAYS defined 0/1 and tested with `#if CAP`, so a typo in a consumer resolves
 // to 0 at build time.
 
-// The mono build has no colour panel, touch controller or display expander.
-#define PANEL_HAS_IO_EXPANDER  0
-#define TOUCH_WAKE_LONGPRESS   0
-#define BUZZER_BACKEND_TCA9554 0
+// The mono build has no colour panel, touch controller, display expander or
+// onboard RGB LED. The only board-level flag left is the C3 radio workaround.
 
 // ESP32-C3 radio: capping AP/STA TX power works around a C3 range/brownout issue
 // (see wifi_manager.cpp).
 #define BOARD_NEEDS_WIFI_TX_LIMIT  1
-
-// The C3 SuperMini has no onboard RGB LED. The colour LED feature itself stays
-// available for a hand-wired LED or WS2812 off free GPIOs.
-#define BOARD_HAS_ONBOARD_RGB_PWM    0
-#define BOARD_HAS_ONBOARD_RGB_PIXEL  0
-#define BOARD_HAS_ONBOARD_RGB        (BOARD_HAS_ONBOARD_RGB_PWM || BOARD_HAS_ONBOARD_RGB_PIXEL)
 
 // The WS2812 pixel driver pulls in the RMT peripheral driver (~12 KB flash);
 // the three-pin PWM path is a few hundred bytes. The -fno-exceptions build
 // reclaims ~148 KB, so the pixel driver fits and single / RGB / WS2812 are all
 // offered for a hand-wired LED.
 #define HAS_LED_PIXEL  1
-
-#if BOARD_HAS_ONBOARD_RGB_PIXEL && !HAS_LED_PIXEL
-#error "A board with an onboard WS2812 cannot drop the pixel driver"
-#endif
 
 // HMS / print_error reporting:
 //
@@ -251,16 +239,6 @@
 #define LED_PWM_RES     8     // PWM resolution (bits) -> 0..255 duty
 
 #define LED_DEFAULT_PIN 0     // no status LED assumed; user configures in web UI
-
-// Onboard RGB pin defaults. Only ever used to pre-fill the portal's pin fields
-// and to let the driver claim those pins back from the deny-list. The mono
-// board has no onboard RGB, so the three fields start at 0 and the user types
-// pins in.
-#define ONBOARD_RGB_R_PIN     0
-#define ONBOARD_RGB_G_PIN     0
-#define ONBOARD_RGB_B_PIN     0
-#define ONBOARD_RGB_ANODE     0
-#define ONBOARD_RGB_DATA_PIN  0
 
 // LED effect tuning (ms periods)
 #define LED_BREATH_PERIOD_MS      2000   // breathing pulse 0->peak->0

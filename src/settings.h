@@ -111,7 +111,6 @@ struct DisplaySettings {
   uint8_t  gestTap;            // single tap:  GT_SMART / GT_NEXT / GT_AMS / GT_WAKE
   uint8_t  gestDouble;         // double tap:  GD_OFF / GD_PLUG / GD_AMS / GD_NEXT
   uint8_t  gestHold;           // hold:        GH_LED / GH_AMS / GH_NONE
-  bool     showBatteryIndicator; // Waveshare boards: show battery icon in status bar
   // Edge glow: animated border light announcing print complete / print failed
   uint8_t  glowMode;       // 0 = Off, 1 = Single color, 2 = Rainbow
   uint16_t glowColor;      // Single-color mode band color (RGB565)
@@ -287,7 +286,7 @@ struct DisplayPowerSettings {
 };
 
 // Button type
-enum ButtonType : uint8_t { BTN_DISABLED = 0, BTN_PUSH = 1, BTN_TOUCH = 2, BTN_TOUCHSCREEN = 3 };
+enum ButtonType : uint8_t { BTN_DISABLED = 0, BTN_PUSH = 1, BTN_TOUCH = 2 };
 
 // Buzzer settings
 struct BuzzerSettings {
@@ -432,7 +431,7 @@ extern bool quadPrinterBeta;
 // C3 antenna workaround (issue #146): true = this board's radio only works at
 // reduced TX power, so every WiFi connect must be capped at 8.5 dBm. Set by
 // wifi_manager when a reduced-power STA attempt succeeds after full-power
-// attempts failed. Only meaningful on BOARD_IS_C3 builds.
+// attempts failed. Meaningful on this ESP32-C3 build only.
 extern bool wifiTxCapped;
 
 void loadSettings();
@@ -448,7 +447,6 @@ void saveRotationSettings();
 void saveButtonSettings();
 void saveBuzzerSettings();
 void saveLedSettings();
-void saveBatteryIndicatorSetting();
 void saveWifiTxCapped();
 void resetSettings();
 

@@ -1398,7 +1398,7 @@ static void handleSaveRotation() {
   // Button settings
   if (server.hasArg("btntype")) {
     uint8_t bt = server.arg("btntype").toInt();
-    if (bt <= 3) buttonType = (ButtonType)bt;
+    if (bt <= 2) buttonType = (ButtonType)bt;
   }
   if (server.hasArg("btnpin")) {
     uint8_t bp = server.arg("btnpin").toInt();
@@ -1437,14 +1437,6 @@ static void handleSaveRotation() {
   }
   saveBuzzerSettings();
   initBuzzer();
-
-  // Battery indicator visibility (Waveshare boards). Always parse so the
-  // form's unchecked state reaches NVS (browsers omit unchecked checkboxes;
-  // saveHardware() JS sends an explicit 0/1 to work around that).
-  if (server.hasArg("batshow")) {
-    dispSettings.showBatteryIndicator = (server.arg("batshow") == "1");
-    saveBatteryIndicatorSetting();
-  }
 
   // Status LED — must be parsed AFTER button + buzzer so sanitizeLedPin()
   // sees the freshly-applied buttonPin and buzzerSettings.pin when checking
@@ -1728,7 +1720,6 @@ static void handleSettingsExport() {
   mono["weatherEnabled"] = monoSettings.weatherEnabled;
   mono["weatherQuery"] = monoSettings.weatherQuery;
   mono["contrast"] = monoSettings.oledContrast;
-  disp["showBatteryIndicator"] = dispSettings.showBatteryIndicator;
   disp["nozzleScaleMax"]  = dispSettings.nozzleScaleMax;
   disp["bedScaleMax"]     = dispSettings.bedScaleMax;
   disp["chamberScaleMax"] = dispSettings.chamberScaleMax;
@@ -2116,7 +2107,6 @@ static void handleSettingsImportFinish() {
     }
     if (disp["fanMatchPrinter"].is<bool>())     dispSettings.fanMatchPrinter = disp["fanMatchPrinter"].as<bool>();
     if (disp["hideStatusReadout"].is<bool>())   dispSettings.hideStatusReadout = disp["hideStatusReadout"].as<bool>();
-    if (disp["showBatteryIndicator"].is<bool>()) dispSettings.showBatteryIndicator = disp["showBatteryIndicator"].as<bool>();
     // Gauge full-scale ranges: accept any JSON number and clamp (so crafted
     // out-of-range values are corrected, not silently ignored).
     if (disp["nozzleScaleMax"].is<int>())  dispSettings.nozzleScaleMax  = constrain(disp["nozzleScaleMax"].as<int>(),  GAUGE_NOZZLE_SCALE_MIN,  GAUGE_NOZZLE_SCALE_MAX);
@@ -2270,7 +2260,10 @@ static void handleSettingsImportFinish() {
   // Button
   JsonObject btn = doc["button"];
   if (btn) {
-    if (btn["type"].is<uint8_t>()) buttonType = (ButtonType)btn["type"].as<uint8_t>();
+    if (btn["type"].is<uint8_t>()) {
+      uint8_t bt = btn["type"].as<uint8_t>();
+      buttonType = (bt <= 2) ? (ButtonType)bt : BTN_DISABLED;
+    }
     if (btn["pin"].is<uint8_t>())  buttonPin = btn["pin"].as<uint8_t>();
   }
 

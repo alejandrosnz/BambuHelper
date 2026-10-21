@@ -39,6 +39,9 @@ DisplayPowerSettings dpSettings;
 ButtonType buttonType = BTN_DISABLED;
 uint8_t buttonPin = BUTTON_DEFAULT_PIN;
 BuzzerSettings buzzerSettings = { false, BUZZER_DEFAULT_PIN, 0, 0, false, false, 35 };
+// Defaults for the optional hand-wired status LED. There is no onboard RGB on
+// the C3 SuperMini, so the green/blue channels and the anode polarity start
+// unset and the user fills them in when picking the three-pin RGB driver.
 LedSettings ledSettings = {
   /*enabled*/             false,
   /*pin*/                 LED_DEFAULT_PIN,
@@ -51,9 +54,9 @@ LedSettings ledSettings = {
   /*errorStrobe*/         false,
   /*errorStrobeSeconds*/  LED_ERROR_STROBE_DEFAULT_S,
   /*driver*/              LED_DRV_SINGLE,
-  /*pinG*/                ONBOARD_RGB_G_PIN,
-  /*pinB*/                ONBOARD_RGB_B_PIN,
-  /*commonAnode*/         ONBOARD_RGB_ANODE != 0,
+  /*pinG*/                0,
+  /*pinB*/                0,
+  /*commonAnode*/         false,
   /*colorIdle*/           LED_COLOR_IDLE_DEFAULT,
   /*colorPrinting*/       LED_COLOR_PRINTING_DEFAULT,
   /*colorPaused*/         LED_COLOR_PAUSED_DEFAULT,
@@ -219,7 +222,6 @@ void defaultDisplaySettings(DisplaySettings& ds) {
   ds.gestTap = GT_SMART;
   ds.gestDouble = GD_OFF;
   ds.gestHold = GH_LED;
-  ds.showBatteryIndicator = false;  // default OFF on all boards; enable per device
   ds.glowMode = 0;             // edge glow off
   ds.glowColor = CLR_GREEN;
   ds.glowStyle = 0;            // Sweep
@@ -604,7 +606,6 @@ void loadSettings() {
   dispSettings.buttonPowerControl = (dispSettings.gestDouble == GD_PLUG);
   dispSettings.gestHold = prefs.getUChar("dsp_ghold", def.gestHold);
   if (dispSettings.gestHold > GH_NONE) dispSettings.gestHold = GH_LED;
-  dispSettings.showBatteryIndicator = prefs.getBool("dsp_bat", def.showBatteryIndicator);
   dispSettings.hideStatusReadout = prefs.getBool("dsp_hidlp", def.hideStatusReadout);
   monoSettings.showTempsDone = prefs.getBool("mno_dtmp", false);
   monoSettings.showTimePrinting = prefs.getBool("mno_ptim", true);
@@ -792,30 +793,13 @@ void loadSettings() {
   rotState.lastRotateMs = 0;
 
   // Button settings
-#if defined(USE_CST816) || defined(USE_CST328) || defined(USE_XPT2046) || defined(USE_FT5X06) || defined(USE_FT6336) || defined(USE_AXS_TOUCH) || defined(USE_GT911) || defined(TOUCH_CS)
-  buttonType = (ButtonType)prefs.getUChar("btn_type", BTN_TOUCHSCREEN);
-#else
   buttonType = (ButtonType)prefs.getUChar("btn_type", BTN_DISABLED);
-#endif
+  if (buttonType > BTN_TOUCH) buttonType = BTN_DISABLED;
   buttonPin = prefs.getUChar("btn_pin", BUTTON_DEFAULT_PIN);
 
   // Buzzer settings
   buzzerSettings.enabled = prefs.getBool("buz_on", false);
   buzzerSettings.pin = prefs.getUChar("buz_pin", BUZZER_DEFAULT_PIN);
-#if defined(BOARD_IS_WS200) || defined(BOARD_IS_WS280) || \
-    (defined(BOARD_IS_S3_ZERO) && defined(DISPLAY_240x320))
-  // One-shot migration off the bad pre-v3.7.7 default. These ESP32-S3 boards
-  // reuse the 240x320 layout profile and used to inherit the CYD's GPIO 26,
-  // which is a flash/PSRAM bus pin on the S3 - the buzzer could never work
-  // there. Anyone who opened the settings page has 26 persisted in NVS, so
-  // rewrite exactly that value to the board's real default. A pin the user
-  // picked themselves is left alone (sanitizeBuzzerPin() vets it instead).
-  if (buzzerSettings.pin == 26) {
-    buzzerSettings.pin = BUZZER_DEFAULT_PIN;
-    prefs.putUChar("buz_pin", buzzerSettings.pin);
-    Serial.printf("Buzzer: migrated stale pin 26 -> %d\n", buzzerSettings.pin);
-  }
-#endif
   buzzerSettings.quietStartHour = prefs.getUChar("buz_qstart", 0);
   buzzerSettings.quietEndHour = prefs.getUChar("buz_qend", 0);
   buzzerSettings.buttonClick = prefs.getBool("buz_click", false);
@@ -841,9 +825,9 @@ void loadSettings() {
   // Colour driver. Absent on an install that predates it, so the defaults keep
   // the LED single-channel and nothing about an existing setup changes.
   ledSettings.driver      = prefs.getUChar("led_drv",   LED_DRV_SINGLE);
-  ledSettings.pinG        = prefs.getUChar("led_ping",  ONBOARD_RGB_G_PIN);
-  ledSettings.pinB        = prefs.getUChar("led_pinb",  ONBOARD_RGB_B_PIN);
-  ledSettings.commonAnode = prefs.getBool ("led_anode", ONBOARD_RGB_ANODE != 0);
+  ledSettings.pinG        = prefs.getUChar("led_ping",  0);
+  ledSettings.pinB        = prefs.getUChar("led_pinb",  0);
+  ledSettings.commonAnode = prefs.getBool ("led_anode", false);
 
   ledSettings.colorIdle     = prefs.getUInt("led_c_idl", LED_COLOR_IDLE_DEFAULT);
   ledSettings.colorPrinting = prefs.getUInt("led_c_prn", LED_COLOR_PRINTING_DEFAULT);
@@ -997,7 +981,6 @@ void saveSettings() {
   prefs.putUChar("dsp_gtap", dispSettings.gestTap);
   prefs.putUChar("dsp_gdbl", dispSettings.gestDouble);
   prefs.putUChar("dsp_ghold", dispSettings.gestHold);
-  prefs.putBool("dsp_bat", dispSettings.showBatteryIndicator);
   prefs.putBool("dsp_hidlp", dispSettings.hideStatusReadout);
   prefs.putBool("mno_dtmp", monoSettings.showTempsDone);
   prefs.putBool("mno_ptim", monoSettings.showTimePrinting);
@@ -1318,12 +1301,6 @@ void saveLedSettings() {
   prefs.putUInt("led_c_fin", ledSettings.colorFinished);
   prefs.putUInt("led_c_err", ledSettings.colorError);
   prefs.putBool("led_night", ledSettings.nightOff);
-  prefs.end();
-}
-
-void saveBatteryIndicatorSetting() {
-  prefs.begin(NVS_NAMESPACE, false);
-  prefs.putBool("dsp_bat", dispSettings.showBatteryIndicator);
   prefs.end();
 }
 

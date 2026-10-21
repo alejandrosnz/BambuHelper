@@ -125,7 +125,7 @@ fetch('/wifi/diag').then(function(r){return r.json();}).then(function(d){
 //              buzpin, buzqs, buzqe, buzclick, buzbeden, buzbedtemp, leden,
 //              leddrv, ledpin, ledping, ledpinb, ledanode, ledbr, ledfxmd,
 //              ledfxsec, ledfxbr, ledauto, ledpause, lederr, lednight,
-//              lederrsec, ledcidl, ledcprn, ledcpau, ledcfin, ledcerr, batshow
+//              lederrsec, ledcidl, ledcprn, ledcpau, ledcfin, ledcerr
 //    WiFi:     ssid, pass, showpass2, netmode, net_ip, net_gw, net_sn,
 //              net_dns, showip, importFile, otaFile
 //    Power:    tsm_cur, tsm_tar, tsm_en, tsm_pt, tsm_po, tsm_pe0..tsm_pe3, tsm_ip,
@@ -1044,7 +1044,6 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
         <option value="0" %BTN_OFF%>Disabled</option>
         <option value="1" %BTN_PUSH%>Push Button (active LOW)</option>
         <option value="2" %BTN_TOUCH%>TTP223 Touch (active HIGH)</option>
-        <option value="3" %BTN_SCREEN%>Touchscreen</option>
       </select>
     </div>
     <div class="field" id="btnPinRow">
@@ -1067,7 +1066,6 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
         <label for="buzpin">Buzzer GPIO pin</label>
         <input type="number" id="buzpin" class="mono" min="1" max="48" value="%BUZ_PIN%" style="max-width:120px">
       </div>
-      <div id="buzFixedAudioInfo" class="help-text" style="display:none">Built-in sound hardware. No GPIO configuration needed.</div>
       <div class="field">
         <label>Quiet hours (optional)</label>
         <div class="hstack" style="gap:var(--sp-2)">
@@ -1136,7 +1134,6 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
         <input type="checkbox" id="ledanode" %LED_ANODE% onchange="ledPreviewSend()">
         <label for="ledanode">Common anode (shared leg on 3V3 - tick if the colours come out inverted)</label>
       </label>
-%LED_ONBOARD_ROW%
       <div id="ledColors" style="display:none">
         <details open>
           <summary>Colour per printer state</summary>
@@ -1198,8 +1195,6 @@ static const char PAGE_HTML_2[] PROGMEM = R"rawliteral(
       </label>
     </div>
   </div>
-
-%BAT_TOGGLE_ROW%
 
   <div class="card">
     <div class="card-head">
@@ -1548,7 +1543,7 @@ R"rawliteral(
 <div class="scrim" id="scrim"></div>
 <div class="toast" id="toast" role="status" aria-live="polite">Saved!</div>
 
-<script>var DEV={board:'%BOARD%',fw:'%FW_VER%',flashMb:'%FLASHMB%',otaSlot:'%OTASLOT%',round:'%ISROUND%',fixedAudio:'%FIXED_AUDIO%',hmsFull:'%HMSFULL%',boardBtn:'%BOARDBTN%'};</script>
+<script>var DEV={board:'%BOARD%',fw:'%FW_VER%',flashMb:'%FLASHMB%',otaSlot:'%OTASLOT%',round:'%ISROUND%',hmsFull:'%HMSFULL%'};</script>
 <script src="/app.js?v=%JSVER%"></script>
 </body>
 </html>
