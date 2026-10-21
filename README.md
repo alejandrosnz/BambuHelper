@@ -82,6 +82,27 @@ Settings are stored in NVS and survive OTA updates.
 
 ### Releasing
 
+#### From GitHub Actions (recommended)
+
+Go to **Actions → Release → Run workflow** (on `main`). The workflow always checks out the current `main`, regardless of the branch selected in the UI.
+
+| Input | Meaning |
+|---|---|
+| `version` | Version to build and release, in `vX.Y.Z` form (for example `v3.9.1`). |
+| `dry_run` | **On by default.** Builds and packages the OTA asset and uploads it as a workflow artifact, but does not commit, tag or publish anything. |
+| `notes` | Optional release notes. Leave empty to auto-generate them from commits. |
+
+A real run (`dry_run` unchecked) does the following:
+
+1. Writes the requested version into `FW_VERSION` in `include/config.h`.
+2. Builds `sh1106_esp32c3` and refuses to continue if the image does not fit the OTA slot.
+3. Commits the version bump to `main` as `github-actions[bot]`.
+4. Creates the `vX.Y.Z` tag and GitHub release with `BambuHelper-OLED-sh1106_esp32c3-vX.Y.Z-ota.bin`.
+
+The job needs write access to the repository. If `main` is protected, allow `github-actions[bot]` to push (or run the local flow below). If `main` moves while the job is building, it stops before tagging; re-run it.
+
+#### Locally
+
 1. Bump `FW_VERSION` in `include/config.h` (and commit it).
 2. Build and package the OTA asset for the current version:
 
