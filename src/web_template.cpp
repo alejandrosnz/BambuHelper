@@ -473,6 +473,9 @@ static bool resolvePlaceholder(const char* name, String& out) {
   // --- Status / version / board ---
   if (strcmp(name, "DBGLOG") == 0)       { out = mqttDebugLog ? "checked" : ""; return true; }
   if (strcmp(name, "FW_VER") == 0)       { out = FW_VERSION; return true; }
+  if (strcmp(name, "REPO_SLUG") == 0)    { out = FW_REPO_SLUG; return true; }
+  if (strcmp(name, "REPO_URL") == 0)     { out = FW_REPO_URL; return true; }
+  if (strcmp(name, "ASSET_PREFIX") == 0) { out = FW_ASSET_PREFIX; return true; }
   // Update-size gate for the release check JS: OTA slot size in bytes and
   // physical flash chip size in MB (16 MB chip on a small slot => the fix is a
   // one-time web-flasher repartition, and the warning says so).

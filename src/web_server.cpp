@@ -1937,7 +1937,7 @@ static bool isExpectedOtaAssetUrl(const String& url) {
   int slash = clean.lastIndexOf('/');
   String file = slash >= 0 ? clean.substring(slash + 1) : clean;
 
-  String prefix = "BambuHelper-" BOARD_VARIANT "-";
+  String prefix = FW_ASSET_PREFIX BOARD_VARIANT "-";
   return file.startsWith(prefix) && file.endsWith("-ota.bin");
 }
 #endif

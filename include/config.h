@@ -2,9 +2,16 @@
 #define CONFIG_H
 
 // =============================================================================
-//  Firmware version
+//  Firmware version and release location
 // =============================================================================
-#define FW_VERSION          "v3.9.0"
+#define FW_VERSION          "v3.9.1"
+
+// This fork publishes its own OTA builds. The web UI reads the latest release
+// from this repository and only offers assets named
+//   BambuHelper-OLED-<BOARD_VARIANT>-<FW_VERSION>-ota.bin
+#define FW_REPO_SLUG        "alejandrosnz/BambuHelper-OLED"
+#define FW_REPO_URL         "https://github.com/alejandrosnz/BambuHelper-OLED"
+#define FW_ASSET_PREFIX     "BambuHelper-OLED-"
 
 // Board variant — injected into the web UI for OTA asset filtering.
 // Normally set via build_flags in platformio.ini; this is a fallback.
@@ -177,7 +184,8 @@
 // Published mirror of Bambu's error-text feed, read by the portal page in the
 // user's browser - never by the device. e.bambulab.com sends no CORS header at
 // all, so the page cannot read the feed directly; GitHub Pages sends
-// "Access-Control-Allow-Origin: *", and release.py refreshes this copy.
+// "Access-Control-Allow-Origin: *". This fork has no Pages site, so it reads the
+// upstream mirror; the data is Bambu's, not the upstream firmware's.
 #define HMS_MIRROR_URL  "https://keralots.github.io/BambuHelper/errors/hms_en.json"
 
 // Signing into a Bambu account from the device itself (portal form -> cloud

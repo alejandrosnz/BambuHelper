@@ -25,7 +25,7 @@ This fork replaces that layer rather than keeping it alongside the mono one: the
 
 **Original repository:** [github.com/Keralots/BambuHelper](https://github.com/Keralots/BambuHelper)
 
-This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path. For the full upstream feature set and cloud/security notes, see the original repository.
+This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path; the fork's own releases start at **v3.9.1**. For the full upstream feature set and cloud/security notes, see the original repository.
 
 ## Hardware
 
@@ -75,10 +75,30 @@ If the upload cannot connect, hold **BOOT** while plugging the board in, then re
 
 ### Updates
 
-- **OTA from the web UI:** WiFi & System → Firmware update (GitHub Releases or a manual `.bin`)
+- **OTA from the web UI:** WiFi & System → Firmware update. The online updater reads the latest release from [github.com/alejandrosnz/BambuHelper-OLED](https://github.com/alejandrosnz/BambuHelper-OLED/releases) and installs the matching `-ota.bin` asset (for this board: `BambuHelper-OLED-sh1106_esp32c3-<version>-ota.bin`). You can also upload that file manually.
 - **USB:** repeat `pio run -e sh1106_esp32c3 -t upload`
 
 Settings are stored in NVS and survive OTA updates.
+
+### Releasing
+
+1. Bump `FW_VERSION` in `include/config.h` (and commit it).
+2. Build and package the OTA asset for the current version:
+
+   ```bash
+   python tools/release.py
+   ```
+
+   This writes `firmware/<version>/BambuHelper-OLED-sh1106_esp32c3-<version>-ota.bin` after checking that the image fits the 1.75 MB OTA slot. Use `--skip-build` to reuse an existing `.pio/build/sh1106_esp32c3/firmware.bin`.
+3. Create the GitHub release with the same name as the tag, e.g. `v3.9.1`:
+
+   ```bash
+   gh release create v3.9.1 \
+       firmware/v3.9.1/BambuHelper-OLED-sh1106_esp32c3-v3.9.1-ota.bin \
+       --title "BambuHelper-OLED v3.9.1" --notes "..."
+   ```
+
+The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-` and ends with `-ota.bin`, so keep that naming exactly.
 
 ## First-time setup
 
