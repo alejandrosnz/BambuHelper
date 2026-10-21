@@ -125,256 +125,26 @@ static uint32_t activeColor() {
 }
 
 // ---------------------------------------------------------------------------
-//  Pin deny-list (board-specific peripheral conflicts)
+//  Pin deny-list (board peripherals)
 // ---------------------------------------------------------------------------
 bool isLedPinAllowed(uint8_t pin) {
   if (pin == 0) return false;
 
-  // Generic dynamic conflicts (all boards)
+  // Dynamic conflicts: nothing else may share a pin with a configured input or
+  // output.
+#if defined(BACKLIGHT_PIN) && BACKLIGHT_PIN >= 0
   if (pin == BACKLIGHT_PIN) return false;
+#endif
   if (buzzerSettings.enabled && pin == buzzerSettings.pin) return false;
   if (buttonType != BTN_DISABLED && pin == buttonPin) return false;
 
-#if defined(BOARD_IS_DIY)
-  // Standalone (not part of the board #elif chain below): a DIY+C3 build must
-  // reject BOTH the DIY display pins here AND the C3 reserved pins in the chain.
-  if (isDiyReservedPin(pin)) return false;
-#endif
-
-#if defined(DISPLAY_CYD) || defined(BOARD_IS_TZT_2432)
-  // CYD (ESP32-2432S028) and TZT L1435-2.4 - same ESP32 pinout, both esp32dev
-  if (pin == 2 || pin == 12 || pin == 13 || pin == 14 || pin == 15) return false;  // display SPI
-  if (pin == 25 || pin == 32 || pin == 33 || pin == 36 || pin == 39) return false; // XPT2046 touch
-  if (pin == 4 || pin == 16 || pin == 17) return false;                            // onboard RGB (32E clone: amp EN + G/B)
-  if (pin == 26) return false;                                                     // onboard speaker amp
-#if defined(DISPLAY_CYD)
-  if (dispSettings.cyd32eVariant && pin == CYD32E_LED_R_PIN) return false;         // 32E clone: red LED moved to GPIO22
-#endif
-  if (pin >= 6 && pin <= 11) return false;                                         // SPI flash
-  if (pin >= 34 && pin <= 39) return false;                                        // input-only
-  if (pin > 39) return false;
-
-#elif defined(BOARD_IS_S3_ZERO)
-  // Waveshare ESP32-S3-Zero + external ST7789 240x240
-  if (pin == 8 || pin == 9 || pin == 10 || pin == 11 || pin == 12) return false;  // display SPI
-  if (pin == 13) return false;                                                     // display backlight
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin == 21) return false;                                                     // onboard WS2812 RGB LED
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM / not exposed
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_S3)
-  // LOLIN S3 mini + ST7789 240x240
-  if (pin == 8 || pin == 9 || pin == 10 || pin == 11 || pin == 12) return false;   // display SPI
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM (qio_qspi)
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_WS200)
-  // Waveshare ESP32-S3-Touch-LCD-2.0"
-  if (pin == 38 || pin == 39 || pin == 40 || pin == 42 || pin == 45) return false; // display SPI
-  if (pin == 47 || pin == 48) return false;                                        // CST816D I2C
-  if (pin == 5) return false;                                                      // battery ADC (BAT_ADC_PIN)
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_WS280)
-  // Waveshare ESP32-S3-Touch-LCD-2.8" (community, untested in-house)
-  if (pin == 39 || pin == 40 || pin == 41 || pin == 42 || pin == 45) return false; // display SPI
-  if (pin == 1 || pin == 2 || pin == 3 || pin == 4) return false;                  // CST328 I2C + RST/IRQ
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_ES3N28P)
-  // QD ES3N28P 2.8" (ILI9341V SPI + FT6336 I2C + ES8311 audio)
-  if (pin == 10 || pin == 11 || pin == 12 || pin == 13 || pin == 46) return false; // display SPI (CS/MOSI/SCLK/MISO/DC)
-  if (pin == 45) return false;                                                     // backlight
-  if (pin == 15 || pin == 16 || pin == 17 || pin == 18) return false;             // FT6336 touch I2C + INT/RST
-  if (pin == 1 || pin == 4 || pin == 5 || pin == 6 || pin == 7 || pin == 8) return false; // ES8311 audio (AP_EN/MCK/BCK/DIN/WS/DOUT)
-  if (pin == 9) return false;                                                      // battery ADC (ADC1_CH8)
-  if (pin == 42) return false;                                                     // onboard WS2812 RGB
-  if (pin == 38 || pin == 39 || pin == 40 || pin == 41 || pin == 47 || pin == 48) return false; // microSD (SDIO)
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM (qio_opi)
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_SC05X)
-  // Panlee SC05_X / ZX2D80CE02S (ST7789 8-bit 8080 parallel + FT5X06 I2C)
-  if (pin == 1 || pin == 2 || pin == 7 ||
-      pin == 15 || pin == 16 || pin == 17 || pin == 18 ||
-      pin == 40 || pin == 41 || pin == 42) return false;                           // 8080 bus: D0-D7 + WR + RS/DC
-  if (pin == 3) return false;                                                       // LCD reset
-  if (pin == 47) return false;                                                      // backlight
-  if (pin == 38) return false;                                                      // LCD_TE (frame sync)
-  if (pin == 8 || pin == 9 || pin == 48) return false;                              // FT5X06 I2C + INT
-  if (pin == 4 || pin == 5 || pin == 6) return false;                               // RS485
-  if (pin == 19 || pin == 20) return false;                                         // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                         // SPI flash/PSRAM
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_WS154)
-  // Waveshare ESP32-S3-Touch-LCD-1.54"
-  if (pin == 21 || pin == 38 || pin == 39 || pin == 40 || pin == 45) return false; // display SPI
-  if (pin == 41 || pin == 42 || pin == 47 || pin == 48) return false;              // CST816 I2C + RST/IRQ
-  if (pin == 8 || pin == 9 || pin == 10 || pin == 12) return false;                // ES8311 I2S
-  if (pin == 7) return false;                                                      // audio PA ctrl
-  if (pin == 2) return false;                                                      // BAT_EN
-  if (pin == 0 || pin == 4 || pin == 5) return false;                              // board buttons
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_WS350)
-  // Waveshare ESP32-S3-Touch-LCD-3.5 (ST7796 SPI + FT6336/TCA9554 I2C)
-  if (pin == 1 || pin == 2 || pin == 3 || pin == 5) return false;                  // display SPI (MOSI/MISO/DC/SCLK)
-  if (pin == 6) return false;                                                      // backlight
-  if (pin == 7 || pin == 8) return false;                                          // I2C (FT6336 touch + TCA9554 expander)
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM (qio_opi)
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_SC01PLUS)
-  // Panlee WT32-SC01 Plus (ST7796 8-bit 8080 parallel + FT6336 I2C)
-  if (pin == 0 || pin == 3 || pin == 8 || pin == 9 ||
-      pin == 15 || pin == 16 || pin == 17 || pin == 18 ||
-      pin == 46 || pin == 47) return false;                                        // 8080 bus: D0-D7 + WR + RS/DC
-  if (pin == 4) return false;                                                      // LCD reset (mux'd with touch reset)
-  if (pin == 45) return false;                                                     // backlight
-  if (pin == 48) return false;                                                     // LCD_TE (frame sync)
-  if (pin == 5 || pin == 6 || pin == 7) return false;                              // FT6336 I2C (SCL/SDA/INT)
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash/PSRAM (also I2S audio 35/36/37)
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_JC3248W535)
-  // Guition JC3248W535 (AXS15231B QSPI 320x480)
-  if (pin == 21 || pin == 39 || pin == 40 || pin == 45 || pin == 47 || pin == 48) return false; // display QSPI
-  if (pin == 38) return false;                                                     // display TE
-  if (pin == 4 || pin == 8) return false;                                          // touch I2C
-  if (pin == 2 || pin == 41 || pin == 42) return false;                            // NS4168 I2S audio
-  if (pin == 19 || pin == 20) return false;                                        // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                                        // SPI flash + PSRAM (qio_opi)
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_C3)
-  // LOLIN C3 mini
-  if (pin == 6 || pin == 7 || pin == 10 || pin == 20 || pin == 21) return false;   // display SPI
-  if (pin == 18 || pin == 19) return false;                                        // USB CDC D-/D+
-  if (pin >= 11 && pin <= 17) return false;                                        // flash/PSRAM
-  if (pin > 21) return false;
-
-#elif defined(BOARD_IS_WS28C)
-  // Waveshare ESP32-S3-Touch-LCD-2.8C (ST7701 480x480 RGB)
-  if (pin >= 8 && pin <= 21) return false;                       // RGB data D3-D10, D13-D15 + touch INT
-  if (pin >= 1 && pin <= 5) return false;                        // SPI MOSI/SCLK, D12, battery ADC, D0
-  if (pin >= 38 && pin <= 41) return false;                      // RGB HSYNC/VSYNC/DE/PCLK
-  if (pin == 45 || pin == 46 || pin == 47 || pin == 48) return false; // RGB D1, D11, D3, D2
-  if (pin == 6) return false;                                    // backlight PWM
-  if (pin == 7 || pin == 15) return false;                       // I2C SCL / SDA (GT911 + TCA9554)
-  if (pin == 19 || pin == 20) return false;                      // USB CDC D-/D+
-  if (pin >= 26 && pin <= 37) return false;                      // SPI flash + PSRAM (qio_opi)
-  if (pin > 48) return false;
-  // Leaves 42/43/44 free (43/44 are UART0). LCD reset, LCD CS, touch reset and
-  // the buzzer are expander bits, not GPIOs, so nothing else to reserve.
-
-#elif defined(BOARD_IS_SENSECAP)
-  // SenseCAP Indicator (ESP32-S3 + ST7701S 480x480 RGB)
-  // RGB565 data pins: D0-D15 = GPIOs 15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0
-  // RGB control: PCLK=21, VSYNC=17, HSYNC=16, DE=18
-  if (pin <= 21) return false;                                   // All RGB data + control pins (0-21)
-  // SPI for display init
-  if (pin == 41 || pin == 48) return false;                      // SPI CLK, MOSI
-  // I2C (shared by touch FT5X06 and PCA9535PW)
-  if (pin == 39 || pin == 40) return false;                      // I2C SDA, SCL
-  // Peripherals
-  if (pin == 45) return false;                                   // backlight PWM
-  if (pin == 38) return false;                                   // user button
-  if (pin == 19 || pin == 20) return false;                                        // UART0 to RP2040 (buzzer is on RP2040 GPIO 19, not ESP32-S3 GPIO 19)
-  // SPI flash + PSRAM (opi_qspi)
-  if (pin >= 26 && pin <= 37) return false;
-  // MISO not used but on SPI bus
-  if (pin == 47) return false;
-  if (pin > 48) return false;
-
-#elif defined(BOARD_IS_DIY)
-  // Last resort for a DIY env that named no chip target, so none of the
-  // BOARD_IS_* branches above matched. isDiyReservedPin() (checked near the top
-  // of this function) already covers the display lines plus the chip's flash /
-  // PSRAM / USB pins; what is left is output capability, which only matters
-  // here - GPIO 34-39 on a classic ESP32 are input-only, perfectly good as a
-  // button but unable to drive an LED at all.
-  #if defined(CONFIG_IDF_TARGET_ESP32)
-  if (pin >= 34 && pin <= 39) return false;
-  #endif
-#endif
+  // ESP32-C3 SuperMini reserved pins: GPIO2 is a strapping pin, 8/9 carry the
+  // OLED I2C bus, 11-17 are the SPI flash, 18/19 are USB CDC and 20/21 are
+  // UART0. Pins 1, 3-7 and 10 remain usable for a hand-wired LED, minus
+  // whatever the button and buzzer claimed above.
+  if (pin == 2 || pin == 8 || pin == 9 || (pin >= 11 && pin <= 21)) return false;
 
   return true;
-}
-
-// Named resolver: the pins the board's own onboard RGB hardware sits on. They
-// are in the deny-list above because nothing else may steal them, but a colour
-// driver IS their rightful owner, so it gets to claim them back.
-static bool isOnboardRgbPin(uint8_t pin, uint8_t drv) {
-#if BOARD_HAS_ONBOARD_RGB_PWM
-  // The three-GPIO onboard LED is the PWM RGB driver's alone. A WS2812 driver
-  // pointed at one of these pins is a misconfig, not a rightful claim-back, so it
-  // must not be exempted from the deny-list.
-  if (drv == LED_DRV_RGB) {
-    if (pin == ONBOARD_RGB_G_PIN || pin == ONBOARD_RGB_B_PIN) return true;
-#if defined(DISPLAY_CYD)
-    // ESP32-32E clone: red moved to GPIO 22 and GPIO 4 became the speaker-amp
-    // enable, so on that variant GPIO 4 is emphatically not ours.
-    if (dispSettings.cyd32eVariant) return pin == CYD32E_LED_R_PIN;
-#endif
-    if (pin == ONBOARD_RGB_R_PIN) return true;
-  }
-#endif
-#if BOARD_HAS_ONBOARD_RGB_PIXEL
-  // ...and the single WS2812 data line is the pixel driver's alone.
-  if (drv == LED_DRV_PIXEL && pin == ONBOARD_RGB_DATA_PIN) return true;
-#endif
-  (void)pin; (void)drv;
-  return false;
-}
-
-// Onboard pins are claimed back only for the driver they physically belong to,
-// and never when a live input has taken one over. The onboard exemption reverses
-// the deny-list's *static* reservation; a button or buzzer the user has since
-// parked on an onboard pin is a dynamic conflict that still wins.
-static bool isRgbLedPinAllowedFor(uint8_t pin, uint8_t drv) {
-  if (pin == 0) return false;
-  if (buzzerSettings.enabled && pin == buzzerSettings.pin) return false;
-  if (buttonType != BTN_DISABLED && pin == buttonPin) return false;
-  if (isOnboardRgbPin(pin, drv)) return true;
-  return isLedPinAllowed(pin);
-}
-
-bool isRgbLedPinAllowed(uint8_t pin) {
-  return isRgbLedPinAllowedFor(pin, LED_DRV_RGB);
-}
-
-bool onboardRgbPins(uint8_t &r, uint8_t &g, uint8_t &b, bool &anode) {
-#if BOARD_HAS_ONBOARD_RGB_PWM
-  r = ONBOARD_RGB_R_PIN;
-#if defined(DISPLAY_CYD)
-  if (dispSettings.cyd32eVariant) r = CYD32E_LED_R_PIN;
-#endif
-  g = ONBOARD_RGB_G_PIN;
-  b = ONBOARD_RGB_B_PIN;
-  anode = (ONBOARD_RGB_ANODE != 0);
-  return true;
-#elif BOARD_HAS_ONBOARD_RGB_PIXEL
-  r = ONBOARD_RGB_DATA_PIN;
-  g = 0;
-  b = 0;
-  anode = false;
-  return true;
-#else
-  (void)r; (void)g; (void)b; (void)anode;
-  return false;
-#endif
 }
 
 void sanitizeLedPin() {
@@ -406,9 +176,9 @@ void sanitizeLedPin() {
   if (ledSettings.driver == LED_DRV_RGB) {
     // All three pins must be drivable and distinct - two channels sharing a pin
     // would fight over one LEDC output and light neither colour correctly.
-    const bool ok = isRgbLedPinAllowed(ledSettings.pin) &&
-                    isRgbLedPinAllowed(ledSettings.pinG) &&
-                    isRgbLedPinAllowed(ledSettings.pinB) &&
+    const bool ok = isLedPinAllowed(ledSettings.pin) &&
+                    isLedPinAllowed(ledSettings.pinG) &&
+                    isLedPinAllowed(ledSettings.pinB) &&
                     ledSettings.pin  != ledSettings.pinG &&
                     ledSettings.pin  != ledSettings.pinB &&
                     ledSettings.pinG != ledSettings.pinB;
@@ -422,11 +192,8 @@ void sanitizeLedPin() {
     return;
   }
 
-  // Single and pixel both hang off one pin; only the pixel may claim an onboard
-  // RGB data line.
-  const bool ok = (ledSettings.driver == LED_DRV_PIXEL)
-                    ? isRgbLedPinAllowedFor(ledSettings.pin, LED_DRV_PIXEL)
-                    : isLedPinAllowed(ledSettings.pin);
+  // Single and pixel both hang off one pin.
+  const bool ok = isLedPinAllowed(ledSettings.pin);
   if (!ok) {
     Serial.printf("LED: pin %d not allowed, disabling\n", ledSettings.pin);
     ledSettings.enabled = false;
@@ -636,30 +403,6 @@ void initLed() {
   errorStrobeArmed = false;
   errorStrobeDismissed = false;
 
-#if BOARD_HAS_ONBOARD_RGB_PWM
-  // The onboard RGB pins float at boot, and on a common-anode LED a floating
-  // pin is a dimly-lit channel - which is why an untouched CYD sits there
-  // glowing red. Park the whole triple at its dark level. Both panel variants
-  // need this, not just the 32E clone: they differ only in which pin is red
-  // (GPIO 4 classic, GPIO 22 on the clone, where GPIO 4 became the amp enable
-  // and belongs to the buzzer). Skipped when a colour driver owns those pins -
-  // the attach below is about to drive them itself.
-  uint8_t obR = 0, obG = 0, obB = 0; bool obAnode = false;
-  onboardRgbPins(obR, obG, obB, obAnode);
-  // Skip the park only when an enabled RGB driver is wired to this exact onboard
-  // triple - the attach below is about to drive those pins itself. An RGB driver
-  // on unrelated external pins leaves the onboard LED unowned, so it still needs
-  // parking or it floats and glows.
-  const bool colorDriverOwnsOnboard =
-      ledSettings.enabled && ledSettings.driver == LED_DRV_RGB &&
-      ledSettings.pin == obR && ledSettings.pinG == obG && ledSettings.pinB == obB;
-  if (!colorDriverOwnsOnboard) {
-    parkPin((int8_t)obR, obAnode);
-    parkPin((int8_t)obG, obAnode);
-    parkPin((int8_t)obB, obAnode);
-  }
-#endif
-
   detachAndForceLow();
   // Disabled with a saved pin: hold the wiring at its OFF level instead of leaving
   // it high-Z, so a floating gate cannot half-light the LED. What "off" means
@@ -670,16 +413,16 @@ void initLed() {
     if (ledSettings.pin != 0) {
       if (ledSettings.driver == LED_DRV_RGB) {
         const bool inv = ledSettings.commonAnode;
-        if (isRgbLedPinAllowed(ledSettings.pin))  parkPin(ledSettings.pin,  inv);
-        if (isRgbLedPinAllowed(ledSettings.pinG)) parkPin(ledSettings.pinG, inv);
-        if (isRgbLedPinAllowed(ledSettings.pinB)) parkPin(ledSettings.pinB, inv);
+        if (isLedPinAllowed(ledSettings.pin))  parkPin(ledSettings.pin,  inv);
+        if (isLedPinAllowed(ledSettings.pinG)) parkPin(ledSettings.pinG, inv);
+        if (isLedPinAllowed(ledSettings.pinB)) parkPin(ledSettings.pinB, inv);
       } else if (ledSettings.driver == LED_DRV_PIXEL) {
 #if HAS_LED_PIXEL
         // A warm reset does not power-cycle a WS2812, so it can boot still lit
         // from a previous config, and detachAndForceLow() above only fired if a
         // driver was already attached. Bring the driver up just to push one off
         // frame, then tear it straight down (which also parks the line low).
-        if (isRgbLedPinAllowedFor(ledSettings.pin, LED_DRV_PIXEL) &&
+        if (isLedPinAllowed(ledSettings.pin) &&
             attachDriver(LED_DRV_PIXEL, ledSettings.pin, 0, 0)) {
           detachAndForceLow();
         }
@@ -692,11 +435,11 @@ void initLed() {
   }
 
   if (ledSettings.driver == LED_DRV_RGB) {
-    if (!isRgbLedPinAllowed(ledSettings.pin) ||
-        !isRgbLedPinAllowed(ledSettings.pinG) ||
-        !isRgbLedPinAllowed(ledSettings.pinB)) return;
+    if (!isLedPinAllowed(ledSettings.pin) ||
+        !isLedPinAllowed(ledSettings.pinG) ||
+        !isLedPinAllowed(ledSettings.pinB)) return;
   } else if (ledSettings.driver == LED_DRV_PIXEL) {
-    if (!isRgbLedPinAllowedFor(ledSettings.pin, LED_DRV_PIXEL)) return;
+    if (!isLedPinAllowed(ledSettings.pin)) return;
   } else if (!isLedPinAllowed(ledSettings.pin)) {
     return;
   }
@@ -720,11 +463,11 @@ void previewLed(bool enabled, uint8_t driver, uint8_t pinR, uint8_t pinG,
 
   bool pinsOk;
   if (driver == LED_DRV_RGB) {
-    pinsOk = isRgbLedPinAllowed(pinR) && isRgbLedPinAllowed(pinG) &&
-             isRgbLedPinAllowed(pinB) &&
+    pinsOk = isLedPinAllowed(pinR) && isLedPinAllowed(pinG) &&
+             isLedPinAllowed(pinB) &&
              pinR != pinG && pinR != pinB && pinG != pinB;
   } else if (driver == LED_DRV_PIXEL) {
-    pinsOk = isRgbLedPinAllowedFor(pinR, LED_DRV_PIXEL);
+    pinsOk = isLedPinAllowed(pinR);
   } else {
     pinsOk = isLedPinAllowed(pinR);
   }

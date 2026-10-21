@@ -350,9 +350,6 @@ static bool resolvePlaceholder(const char* name, String& out) {
     opt(dispSettings.gestHold, GH_LED,  "Status LED brightness");
     opt(dispSettings.gestHold, GH_NONE, "Nothing");
     out += "</select>";
-#if TOUCH_WAKE_LONGPRESS
-    out += "<span class=\"text-dim small\">This touchscreen often reads a wake touch as a hold.</span>";
-#endif
     out += "</div>";
     return true;
   }
@@ -390,15 +387,6 @@ static bool resolvePlaceholder(const char* name, String& out) {
   }
   if (strcmp(name, "PONG_DISP") == 0) {
     out = "";
-    return true;
-  }
-  if (strcmp(name, "BOARDBTN") == 0) {
-    // JS board flag: an onboard button works whatever "Button type" says.
-#if defined(BOARD_BTN_1)
-    out = "1";
-#else
-    out = "0";
-#endif
     return true;
   }
   if (strcmp(name, "ISROUND") == 0) {
@@ -542,24 +530,12 @@ static bool resolvePlaceholder(const char* name, String& out) {
   if (strcmp(name, "BTN_OFF") == 0)    { out = buttonType == BTN_DISABLED ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_PUSH") == 0)   { out = buttonType == BTN_PUSH ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_TOUCH") == 0)  { out = buttonType == BTN_TOUCH ? "selected" : ""; return true; }
-  if (strcmp(name, "BTN_SCREEN") == 0) { out = buttonType == BTN_TOUCHSCREEN ? "selected" : ""; return true; }
   if (strcmp(name, "BTN_PIN") == 0)    { out = String(buttonPin); return true; }
 
   // --- Buzzer ---
   if (strcmp(name, "BUZ_OFF") == 0) { out = buzzerSettings.enabled ? "" : "selected"; return true; }
   if (strcmp(name, "BUZ_ON") == 0)  { out = buzzerSettings.enabled ? "selected" : ""; return true; }
   if (strcmp(name, "BUZ_PIN") == 0) { out = String(buzzerSettings.pin); return true; }
-  if (strcmp(name, "FIXED_AUDIO") == 0) {
-    // "1" when the sound hardware is wired, not chosen: an I2S codec/amp, or
-    // an IO-expander bit. Either way the portal must not ask for a GPIO.
-#if defined(BOARD_HAS_ES8311_AUDIO) || defined(BOARD_HAS_NS4168_AUDIO) || \
-    BUZZER_BACKEND_TCA9554
-    out = "1";
-#else
-    out = "0";
-#endif
-    return true;
-  }
   if (strcmp(name, "BUZ_QS") == 0)        { out = String(buzzerSettings.quietStartHour); return true; }
   if (strcmp(name, "BUZ_QE") == 0)        { out = String(buzzerSettings.quietEndHour); return true; }
   if (strcmp(name, "BUZ_CLICK") == 0)     { out = buzzerSettings.buttonClick ? "checked" : ""; return true; }
@@ -602,45 +578,6 @@ static bool resolvePlaceholder(const char* name, String& out) {
   if (strcmp(name, "LED_C_PAUSE") == 0) { out = ledHexColor(ledSettings.colorPaused);   return true; }
   if (strcmp(name, "LED_C_FIN")   == 0) { out = ledHexColor(ledSettings.colorFinished); return true; }
   if (strcmp(name, "LED_C_ERR")   == 0) { out = ledHexColor(ledSettings.colorError);    return true; }
-  // Shortcut that fills the pin fields with the board's own onboard RGB wiring.
-  // Emitted as a block rather than inline markup because PAGE_HTML is one raw
-  // string literal - a #if inside it would ship as literal text. The pin values
-  // are resolved per render: on the CYD the red pin follows the ESP32-32E
-  // runtime variant.
-  if (strcmp(name, "LED_ONBOARD_ROW") == 0) {
-#if BOARD_HAS_ONBOARD_RGB
-    uint8_t r = 0, g = 0, b = 0; bool anode = false;
-    onboardRgbPins(r, g, b, anode);
-    out  = "<div id=\"ledOnboard\" class=\"field\" data-r=\"" + String(r) + "\"";
-    out += " data-g=\"" + String(g) + "\" data-b=\"" + String(b) + "\"";
-    out += " data-anode=\"" + String(anode ? "1" : "0") + "\"";
-    out += " data-drv=\"" + String((int)(BOARD_HAS_ONBOARD_RGB_PIXEL ? LED_DRV_PIXEL : LED_DRV_RGB)) + "\">";
-    out += "<button type=\"button\" class=\"btn btn-ghost btn-sm\" onclick=\"ledUseOnboard()\">";
-    out += "Use this board's onboard RGB LED</button></div>";
-#else
-    out = "";
-#endif
-    return true;
-  }
-
-  // --- Battery indicator (Waveshare boards only) ---
-  if (strcmp(name, "BAT_TOGGLE_ROW") == 0) {
-#if defined(BOARD_HAS_BATTERY)
-    out  = "<div class=\"card\">";
-    out += "<div class=\"card-head\"><div><h3>Battery indicator</h3>";
-    out += "<p>For boards with a battery wired. Shows charge state on the display.</p></div></div>";
-    out += "<label class=\"check-row\">";
-    out += "<input type=\"checkbox\" id=\"batshow\"";
-    if (dispSettings.showBatteryIndicator) out += " checked";
-    out += "><label for=\"batshow\">Show battery indicator</label>";
-    out += "</label>";
-    out += "<div class=\"hint\" style=\"padding-left:28px;margin-top:-4px\">Hide if your board has no battery wired (avoids phantom readings).</div>";
-    out += "</div>";
-#else
-    out = "";
-#endif
-    return true;
-  }
 
   // --- Tasmota power monitoring ---
   if (strcmp(name, "POWER_TAB_2") == 0) {
