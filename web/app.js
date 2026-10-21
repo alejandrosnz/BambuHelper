@@ -1408,10 +1408,9 @@ function toggleSetting(key, on){
 }
 
 /* ============ Mono OLED board: hide non-mono settings ============
-   The mono-c3 board (SH1106 128x64) only uses Printer connection, the Mono
+   The sh1106_esp32c3 board (SH1106 128x64) only uses Printer connection, the Mono
    OLED card, Clock timezone/format, WiFi & System and Diagnostics. Everything
-   else is TFT-only markup that stays compiled in (other boards ignore the
-   data-mono flag) and is only hidden here, never deleted. */
+   else is TFT-era markup that is hidden here, never rendered by this build. */
 function isMonoBoard(){
   return document.body && document.body.getAttribute('data-mono') === '1';
 }

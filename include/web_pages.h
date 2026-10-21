@@ -592,7 +592,7 @@ R"rawliteral(
   </div>
 
   <div class="card">
-    <div class="card-head"><div><h3>Mono OLED</h3><p>Which rows the 128x64 OLED shows. Applies to the mono-c3 board only; other boards ignore it.</p></div></div>
+    <div class="card-head"><div><h3>Mono OLED</h3><p>Which rows the 128x64 OLED shows.</p></div></div>
     <label class="check-row">
       <input type="checkbox" id="mno_lyr" value="1" %MONO_LYR% onchange="toggleSetting('mno_lyr',this.checked)">
       <label for="mno_lyr">Show Layer line while printing</label>

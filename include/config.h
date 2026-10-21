@@ -9,7 +9,7 @@
 // Board variant — injected into the web UI for OTA asset filtering.
 // Normally set via build_flags in platformio.ini; this is a fallback.
 #ifndef BOARD_VARIANT
-#define BOARD_VARIANT       "mono_c3"
+#define BOARD_VARIANT       "sh1106_esp32c3"
 #endif
 
 // =============================================================================
