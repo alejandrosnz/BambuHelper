@@ -41,7 +41,7 @@ inline bool isCloudMode(ConnMode m) { return m == CONN_CLOUD || m == CONN_CLOUD_
 
 struct AmsTray {
   bool     present;        // tray physically present
-  uint16_t colorRgb565;    // pre-converted for TFT
+  uint16_t colorRgb565;    // pre-converted for colour UIs
   char     type[16];       // "PLA Matte" etc.
   int8_t   remain;         // 0-100%, -1 = unknown/third-party
 };

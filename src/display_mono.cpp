@@ -11,8 +11,6 @@
 
 #include "display_ui.h"
 #include "display_edge_glow.h"
-#include "clock_mode.h"
-#include "clock_pong.h"
 #include "settings.h"
 
 #ifdef BOARD_IS_MONO
@@ -23,7 +21,6 @@ static ScreenState currentScreen = SCREEN_SPLASH;
 void initDisplay() {}
 void updateDisplay() {}
 void flushFrame() {}
-void markFrameDirty() {}
 
 // --- Screen state ----------------------------------------------------------
 void setScreenState(ScreenState state) { currentScreen = state; }
@@ -65,15 +62,10 @@ void triggerDisplayTransition() {}
 // --- Layout capabilities ---------------------------------------------------
 bool displaySupportsSplit() { return false; }
 bool cardOnScreen() { return false; }
-bool isDisplayForceRedraw() { return false; }
 
 // --- AMS drying screen -----------------------------------------------------
 uint8_t dryingUnitCount(const AmsState&) { return 0; }
 void resetDryingRotation() {}
-
-// --- Screenshot endpoint ---------------------------------------------------
-bool screenCaptureBegin(const uint16_t**, int16_t*, int16_t*) { return false; }
-void screenCaptureEnd() {}
 
 // --- Printer error detail --------------------------------------------------
 #if HAS_HMS_UI
