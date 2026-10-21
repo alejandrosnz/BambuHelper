@@ -12,7 +12,6 @@
 #include "ssdp_discovery.h"
 #include "wifi_manager.h"
 #include "display_ui.h"
-#include "display_card.h"
 #include "display_edge_glow.h"
 #include "config.h"
 #include "button.h"
@@ -20,8 +19,6 @@
 #include "led.h"
 #include "timezones.h"
 #include "tasmota.h"
-#include "clock_mode.h"
-#include "clock_pong.h"
 #include "hms_lookup.h"
 #include <WebServer.h>
 #include <ArduinoJson.h>
@@ -429,9 +426,7 @@ static void handleSaveGaugeLayout() {
   for (uint8_t g = 0; g < PORTRAIT_EXTRA_COUNT;   g++) readSlotArg("px", g, cfg.portraitExtras[g]);
   for (uint8_t g = 0; g < IDLE_SLOT_COUNT;        g++) {
     readSlotArg("is", g, cfg.idleSlots[g]);
-    // The Ready / Print Complete screens redraw only on change, while the
-    // camera tile paints on its own cadence and camera_client only streams for
-    // a type parked in gaugeSlots - it would sit there as a stale frame.
+    // GAUGE_CAMERA is a colour-only tile; never park it on an idle slot.
     if (cfg.idleSlots[g] == GAUGE_CAMERA) cfg.idleSlots[g] = GAUGE_EMPTY;
   }
   cfg.amsView = server.hasArg("amsv");
@@ -779,71 +774,6 @@ static void handleDebug() {
   server.send(200, "application/json", json);
 }
 
-// Byte-swapped RGB565 frame as a 24-bit BMP - the panel itself cannot be read back.
-// bandH > 0: buf is a Card band, re-rendered via cardBandView() as rows advance.
-static void sendRgb565Bmp(const uint16_t* buf, int16_t w, int16_t h, int16_t bandH) {
-  const uint32_t rowBytes = ((uint32_t)w * 3 + 3) & ~3u;
-  const uint32_t dataSize = rowBytes * h, fileSize = 54 + dataSize;
-  uint8_t hdr[54] = {'B', 'M'};
-  auto put32 = [&](int off, uint32_t v) { for (int i = 0; i < 4; i++) hdr[off + i] = (uint8_t)(v >> (8 * i)); };
-  put32(2, fileSize); put32(10, 54); put32(14, 40); put32(18, (uint32_t)w); put32(22, (uint32_t)h);
-  hdr[26] = 1; hdr[28] = 24; put32(34, dataSize);
-  server.setContentLength(fileSize);
-  server.send(200, "image/bmp", "");
-  server.sendContent((const char*)hdr, sizeof(hdr));
-  uint8_t row[480 * 3 + 4];
-  if (rowBytes > sizeof(row)) return;
-  const unsigned long t0 = millis();
-  for (int16_t y = h - 1; y >= 0; y--) {          // BMP rows run bottom-up
-    // A slow or vanished client must not hold the loop (display, MQTT) hostage.
-    if (!server.client().connected() || millis() - t0 > 5000) { server.client().stop(); return; }
-    memset(row, 0, rowBytes);
-    int16_t ly = y;
-    if (bandH) {
-      const int16_t y0 = y - y % bandH;
-      int16_t bw, bh, fh;
-      if (y % bandH == bandH - 1 || y == h - 1) {
-        if (!cardBandView(y0, &buf, &bw, &bh, &fh)) { server.client().stop(); return; }
-      }
-      ly = y - y0;
-    }
-    const uint16_t* src = buf + (uint32_t)ly * w;
-    for (int16_t x = 0; x < w; x++) {
-      uint16_t v = (uint16_t)((src[x] >> 8) | (src[x] << 8));   // sprite stores swapped RGB565
-      uint8_t r = (v >> 11) & 0x1F, g = (v >> 5) & 0x3F, b = v & 0x1F;
-      row[x * 3 + 0] = (uint8_t)((b << 3) | (b >> 2));
-      row[x * 3 + 1] = (uint8_t)((g << 2) | (g >> 4));
-      row[x * 3 + 2] = (uint8_t)((r << 3) | (r >> 2));
-    }
-    server.sendContent((const char*)row, rowBytes);
-  }
-}
-
-// Last Card frame.
-static void handleCardBmp() {
-  const uint16_t* buf; int16_t w, h, bandH = 0;
-  if (cardFrameView(&buf, &w, &h)) {
-    sendRgb565Bmp(buf, w, h, 0);
-  } else if (cardBandView(0, &buf, &w, &bandH, &h)) {
-    // Band-render board: re-render the last frame band by band, bottom-up.
-    sendRgb565Bmp(buf, w, h, bandH);
-  } else {
-    server.send(404, "text/plain", "No Card frame (Card style off)");
-  }
-  cardBandRelease();   // band boards: the band sprite holds DMA-capable RAM
-}
-
-// Whatever screen is up (gauges, clock, Card...), re-rendered into PSRAM.
-static void handleScreenBmp() {
-  const uint16_t* buf; int16_t w, h;
-  if (!screenCaptureBegin(&buf, &w, &h)) {
-    server.send(503, "text/plain", "Screenshot needs free PSRAM (not on a power-confirm screen)");
-    return;
-  }
-  sendRgb565Bmp(buf, w, h, 0);
-  screenCaptureEnd();
-}
-
 static void handleDebugToggle() {
   if (server.hasArg("on")) {
     mqttDebugLog = (server.arg("on") == "1");
@@ -888,12 +818,6 @@ static void handleToggleSetting() {
   else if (key == "cydcls")  dispSettings.cydPanelClassic = on;
   else if (key == "cyd32e")  dispSettings.cyd32eVariant = on;
   else if (key == "rskin")   dispSettings.roundSkin = (uint8_t)constrain(server.arg("val").toInt(), 0, 2);
-#if HAS_CARD_SKIN
-  else if (key == "card")    dispSettings.cardStyle  = (uint8_t)constrain(server.arg("val").toInt(), 0, 1);
-  else if (key == "cleft")   dispSettings.cardLeft   = (uint8_t)constrain(server.arg("val").toInt(), 0, 2);
-  else if (key == "cbot")    dispSettings.cardBottom = (uint8_t)constrain(server.arg("val").toInt(), 0, 1);
-  else if (key == "cready")  dispSettings.cardReady  = (uint8_t)constrain(server.arg("val").toInt(), 0, 2);
-#endif
   else if (key == "l8s")     dispSettings.landscape8Slots = on;
   else if (key == "p9s")     dispSettings.portrait9Slots = on;
   else if (key == "clkinfo") dispSettings.showClockInfo = on;
@@ -952,7 +876,6 @@ static void handleToggleSetting() {
   if (key == "cydcls") scheduleRestart(800);  // panel swap needs a fresh init
   if (key == "cyd32e") scheduleRestart(800);  // re-init amp enable + RGB pins cleanly
   if (key == "rskin") triggerDisplayTransition();  // repaint print dashboard with the new skin
-  if (key == "card" || key == "cleft" || key == "cbot" || key == "cready") triggerDisplayTransition();
   if (key == "use24h") { resetClock(); resetPongClock(); triggerDisplayTransition(); }
   if (key == "clkinfo") { resetClock(); triggerDisplayTransition(); }
   if (key == "clkhd") { resetClock(); triggerDisplayTransition(); }
@@ -1282,20 +1205,8 @@ static void handlePrinterConfig() {
   doc["hasExhaustFan"]  = (st.airductFuncs & (1u << 2)) != 0;  // X2D + H2C
   doc["hasDualNozzle"]  = st.dualNozzle;                       // H2D/H2C/X2D per-nozzle temp gauges
   doc["hasTasmota"]     = tasmotaConfiguredForSlot(slot);      // gates the Power gauge option
-#if BOARD_HAS_CAMERA
-  // Camera gauge: only LAN-mode P1/A1 with an access code serve the port-6000
-  // chamber image. (P1S=01P, P1P=01S, A1=039, A1mini=030.)
-  {
-    const char* cs = cfg.serial;
-    bool p1a1 = strlen(cs) >= 3 &&
-                (strncmp(cs, "01P", 3) == 0 || strncmp(cs, "01S", 3) == 0 ||
-                 strncmp(cs, "039", 3) == 0 || strncmp(cs, "030", 3) == 0);
-    doc["hasLanCamera"] = (cfg.mode == CONN_LOCAL) && cfg.accessCode[0] && p1a1;
-  }
-#else
-  doc["hasLanCamera"] = false;
-#endif
-  doc["hasPlateThumb"]  = (bool)HAS_CARD_THUMB;                // Plate preview tile (PSRAM boards)
+  doc["hasLanCamera"]   = false;
+  doc["hasPlateThumb"]  = false;
   JsonArray slots = doc["gaugeSlots"].to<JsonArray>();
   for (uint8_t g = 0; g < GAUGE_SLOT_COUNT; g++) slots.add(cfg.gaugeSlots[g]);
   JsonArray lext = doc["landscapeExtras"].to<JsonArray>();
@@ -2886,8 +2797,6 @@ void initWebServer() {
   server.on("/reset", HTTP_GET, handleReset);
   server.on("/reboot", HTTP_POST, handleReboot);
   server.on("/debug", HTTP_GET, handleDebug);
-  server.on("/card.bmp", HTTP_GET, handleCardBmp);
-  server.on("/screen.bmp", HTTP_GET, handleScreenBmp);
   server.on("/debug/toggle", HTTP_POST, handleDebugToggle);
   server.on("/save/toggle", HTTP_POST, handleToggleSetting);
   server.on("/glow/test", HTTP_POST, handleGlowTest);

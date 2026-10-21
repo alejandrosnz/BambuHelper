@@ -112,7 +112,7 @@ static void diagnoseStaFailure() {
   while ((n = WiFi.scanComplete()) == WIFI_SCAN_RUNNING && millis() - t0 < 10000) {
     delay(50);
     updateDisplay();
-    flushFrame();  // JC3248W535: push sprite to panel during blocking loop
+    flushFrame();  // no-op on mono; kept for the blocking-loop hook
   }
 
   bool exact = false, enterprise = false, secured = false;
@@ -299,7 +299,7 @@ static void completeWiFiStartup() {
     unsigned long ipStart = millis();
     while (millis() - ipStart < 1500) {
       updateDisplay();
-      flushFrame();  // JC3248W535: push sprite to panel during blocking loop
+      flushFrame();  // no-op on mono; kept for the blocking-loop hook
       delay(50);
     }
   }
@@ -364,7 +364,7 @@ void initWiFi() {
              millis() - start < WIFI_CONNECT_TIMEOUT) {
         delay(100);
         updateDisplay();
-        flushFrame();  // JC3248W535: push sprite to panel during blocking loop
+        flushFrame();  // no-op on mono; kept for the blocking-loop hook
       }
       if (WiFi.status() == WL_CONNECTED) {
 #if BOARD_NEEDS_WIFI_TX_LIMIT

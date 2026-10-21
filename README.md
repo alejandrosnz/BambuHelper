@@ -12,9 +12,9 @@ A fork of [BambuHelper](https://github.com/Keralots/BambuHelper) that turns an *
 
 ## Why this fork?
 
-Upstream BambuHelper is built around colour TFT panels. Its display layer (LovyanGFX / TFT_eSPI, gauge layouts, cards, animations) assumes a much larger, colour screen, so adding a 128×64 monochrome OLED there would have meant reshaping the whole display architecture.
+Upstream BambuHelper is built around colour TFT panels. Its display layer (LovyanGFX / TFT_eSPI, gauge layouts, cards, animations, camera thumbnails) assumes a much larger, colour screen, so adding a 128×64 monochrome OLED there would have meant reshaping the whole display architecture.
 
-This fork keeps the mono work self-contained in a separate display path:
+This fork replaces that layer rather than keeping it alongside the mono one: the colour renderers, layouts, fonts, TFT configuration and camera/thumbnail code have been removed, and only the mono path is compiled. What remains is:
 
 | File | Purpose |
 |---|---|
@@ -25,7 +25,7 @@ This fork keeps the mono work self-contained in a separate display path:
 
 **Original repository:** [github.com/Keralots/BambuHelper](https://github.com/Keralots/BambuHelper)
 
-This fork tracks upstream **v3.9.0**. Mono-specific changes only; for the full upstream feature set and cloud/security notes, see the original repository.
+This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path. For the full upstream feature set and cloud/security notes, see the original repository.
 
 ## Hardware
 
@@ -152,7 +152,7 @@ TFT-only sections (Display, After print, Colors, Hardware, Power) are hidden aut
 
 - **1 printer only** — the C3 has no PSRAM and the mono layer targets a single printer.
 - **No touch, buttons or backlight** — the four-wire OLED has none; the clock/screensaver handles idle display.
-- **Monochrome 128×64 only** — the TFT gauge/card layouts do not apply.
+- **Monochrome 128×64 only** — the upstream colour TFT display layer is not part of this build.
 - **HMS text is not embedded on the C3** — the OLED shows the code, the web portal resolves the full sentence.
 - **ArduinoJson v7** is pinned for this fork; the upstream parser rewrite is not included.
 
