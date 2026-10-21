@@ -1,6 +1,6 @@
-# BambuHelper-Mono
+# BambuHelper-OLED
 
-![BambuHelper-Mono running on a 3D-printed terminal case](img/sh1106_128x64_oled.jpg)
+![BambuHelper-OLED running on a 3D-printed terminal case](img/sh1106_128x64_oled.jpg)
 
 A fork of [BambuHelper](https://github.com/Keralots/BambuHelper) that turns an **ESP32-C3 SuperMini + SH1106 128×64 monochrome OLED** into a tiny, always-on Bambu Lab print monitor.
 
@@ -63,8 +63,8 @@ This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono
 ### First flash (USB)
 
 ```bash
-git clone https://github.com/alejandrosnz/BambuHelper.git
-cd BambuHelper
+git clone https://github.com/alejandrosnz/BambuHelper-OLED.git
+cd BambuHelper-OLED
 
 pio run -e sh1106_esp32c3                  # build
 pio run -e sh1106_esp32c3 -t upload        # flash over USB

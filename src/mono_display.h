@@ -1,4 +1,4 @@
-// BambuHelper-Mono: display layer for the SH1106 128x64 over I2C.
+// BambuHelper-OLED: display layer for the SH1106 128x64 over I2C.
 // Style copied from ESP-Spotify-OLED:
 // Adafruit_SH1106G, FreeMonoBold9pt7b for the title, default font for the
 // rest, bar via drawRect+fillRect, hand-drawn bitmap icons, transliterated names.
