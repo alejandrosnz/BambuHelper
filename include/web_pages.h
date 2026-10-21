@@ -111,9 +111,9 @@ fetch('/wifi/diag').then(function(r){return r.json();}).then(function(d){
 //    Printer:  pname, ip, serial, code, connmode, region, cl_token, cl_serial,
 //              cl_pname, dualp, gs0..gs5, lx0..lx1, px0..px2, is0..is1, amsv
 //    Display:  bright, nighten, nstart, nend, nbright, ssbright, keepon, afterprint,
-//              fmins, afterfin, dack, fintm, kps, pong, abar, slbl, timem, fanmp, hidelp, invcol,
-//              cydcls, cyd32e, rskin, card, cleft, cbot, cready, rotation, tz, use24h, datefmt, clk_time, clk_date,
-//              clk_size, clk_dsize, clk_hidedate, noz_max, bed_max, cht_max, pwr_max,
+//              fmins, afterfin, dack, fintm, kps, abar, slbl, timem, fanmp, hidelp, invcol,
+//              cydcls, cyd32e, rskin, card, cleft, cbot, cready, rotation, tz, use24h, datefmt,
+//              clk_hidedate, noz_max, bed_max, cht_max, pwr_max,
 //              gsmooth, warn_thr, warn_clr,
 //              clr_bg, clr_track, clr_pbar, clr_eta, clr_fin, clr_stok,
 //              clr_pname, clr_txt, clr_txtd, clr_dorc, clr_doro, bulk_a/l/v,
@@ -813,7 +813,7 @@ R"rawliteral(
   </div>
 
   <div class="card">
-    <div class="card-head"><div><h3>Clock</h3><p>Timezone, format, and color of the clock screen.</p></div></div>
+    <div class="card-head"><div><h3>Clock</h3><p>Timezone, time format, and the small date line above the clock.</p></div></div>
       <div class="field">
         <label for="tz">Timezone (DST switches automatically)</label>
         <select id="tz"></select>
@@ -832,43 +832,12 @@ R"rawliteral(
           <option value="4" %DATEFMT4%>DD MMM YYYY (31 Dec 2025)</option>
           <option value="5" %DATEFMT5%>MMM DD, YYYY (Dec 31, 2025)</option>
         </select>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label for="clk_time">Time color</label>
-          <div class="hstack"><input type="color" id="clk_time" value="%CLK_TIME%"><span class="mono small text-dim">%CLK_TIME%</span></div>
-        </div>
-        <div class="field">
-          <label for="clk_date">Date color</label>
-          <div class="hstack"><input type="color" id="clk_date" value="%CLK_DATE%"><span class="mono small text-dim">%CLK_DATE%</span></div>
-        </div>
-      </div>
-      <div class="field">
-        <label for="clk_size">Time size</label>
-        <select id="clk_size">
-          <option value="0" %CLKSZ0%>Auto (default)</option>
-          <option value="1" %CLKSZ1%>Normal</option>
-          <option value="2" %CLKSZ2%>Medium</option>
-          <option value="3" %CLKSZ3%>Large (falls back if screen too narrow)</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="clk_dsize">Date size</label>
-        <select id="clk_dsize">
-          <option value="0" %CLKDS0%>Auto (match time size)</option>
-          <option value="1" %CLKDS1%>Normal</option>
-          <option value="2" %CLKDS2%>Medium</option>
-          <option value="3" %CLKDS3%>Large (falls back if too wide)</option>
-        </select>
+        <div class="hint">Drawn in small text at the top of the clock screen. The SH1106 has no colour or size choice.</div>
       </div>
       <label class="check-row">
         <input type="checkbox" id="clk_hidedate" value="1" %CLK_HIDEDATE% onchange="toggleSetting('clkhd',this.checked)">
         <label for="clk_hidedate">Hide date (time only)</label>
       </label>
-    <label class="check-row" id="pong-row" style="%PONG_DISP%">
-      <input type="checkbox" id="pong" value="1" %PONG% onchange="toggleSetting('pong',this.checked)">
-      <label for="pong">Breakout clock (animated game as screensaver)</label>
-    </label>
     <div class="help-text" style="padding-left:28px">Without a physical button, clock is always shown instead of turning the display off.</div>
   </div>
 
