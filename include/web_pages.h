@@ -179,7 +179,7 @@ static const char PAGE_HTML_1[] PROGMEM = R"rawliteral(
 %HMS_NAV%
   <h4>Display</h4>
   <button class="nav-item" type="button" data-section="display"><span>Screen</span></button>
-  <button class="nav-item" type="button" data-section="printscreen"><span>Print screen</span></button>
+  <button class="nav-item" type="button" data-section="printscreen"><span>OLED</span></button>
   <button class="nav-item" type="button" data-section="afterprint"><span>After print</span></button>
   <button class="nav-item" type="button" data-section="clock"><span>Clock</span></button>
   <button class="nav-item" type="button" data-section="colors"><span>Colors</span></button>
@@ -401,7 +401,7 @@ R"rawliteral(
     <div class="card-head">
       <div>
         <h3>Gauge Layout</h3>
-        <p id="glDesc">Per-printer display slots. The standard 2x3 grid is always shown while printing. On 240x320 and 320x480 boards the extra rows below only render when the matching grid mode (<em>Landscape 8 slots</em> / <em>Portrait 9 slots</em>) is enabled under <strong>Print screen</strong>. The last pair is the two gauges on the Ready and Print complete screens - handy for watching chamber temperature while a part cools. That pair is not used when <em>Keep print status screen after completion</em> is on, since the print grid stays up instead. Set any slot to <em>Empty</em> to hide it.</p>
+        <p id="glDesc">Per-printer display slots. The standard 2x3 grid is always shown while printing. On 240x320 and 320x480 boards the extra rows below only render when the matching grid mode (<em>Landscape 8 slots</em> / <em>Portrait 9 slots</em>) is enabled under <strong>OLED</strong>. The last pair is the two gauges on the Ready and Print complete screens - handy for watching chamber temperature while a part cools. That pair is not used when <em>Keep print status screen after completion</em> is on, since the print grid stays up instead. Set any slot to <em>Empty</em> to hide it.</p>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="resetGaugeLayout()">Reset to default</button>
     </div>
@@ -559,8 +559,8 @@ R"rawliteral(
 
 <div class="section" id="sec-printscreen" hidden>
   <div class="section-intro">
-    <h2>Print screen</h2>
-    <p>How the screen looks while a printer works: the style, its options and gauge tuning.</p>
+    <h2>OLED</h2>
+    <p>What the 128&times;64 screen shows, grouped by screen. These controls save as soon as you change them.</p>
   </div>
 
   <div class="card">
@@ -591,61 +591,87 @@ R"rawliteral(
 %AMST_ROW%
   </div>
 
-  <div class="card">
-    <div class="card-head"><div><h3>Mono OLED</h3><p>Which rows the 128x64 OLED shows.</p></div></div>
+  <div class="card mono-card">
+    <div class="card-head"><div><h3>While printing</h3><p>Rows shown while a job is running.</p></div></div>
     <label class="check-row">
-      <input type="checkbox" id="mno_lyr" value="1" %MONO_LYR% onchange="toggleSetting('mno_lyr',this.checked)">
-      <label for="mno_lyr">Show Layer line while printing</label>
+      <input type="checkbox" id="mno_lyr" value="1" %MONO_LYR% onchange="toggleSetting('mno_lyr',this.checked,'Layer line')">
+      <label for="mno_lyr">Show Layer line</label>
     </label>
     <label class="check-row">
-      <input type="checkbox" id="mno_bar" value="1" %MONO_BAR% onchange="toggleSetting('mno_bar',this.checked)">
-      <label for="mno_bar">Show progress bar while printing</label>
+      <input type="checkbox" id="mno_bar" value="1" %MONO_BAR% onchange="toggleSetting('mno_bar',this.checked,'Progress bar')">
+      <label for="mno_bar">Show progress bar</label>
     </label>
     <label class="check-row">
-      <input type="checkbox" id="mno_timalt" value="1" %MONO_TIMALT% onchange="toggleSetting('mno_timalt',this.checked)">
-      <label for="mno_timalt">Alternate remaining time and ETA bottom-right (5 s)</label>
+      <input type="checkbox" id="mno_ptim" value="1" %MONO_PTIM% onchange="toggleSetting('mno_ptim',this.checked,'Remaining time')">
+      <label for="mno_ptim">Show remaining time</label>
     </label>
     <label class="check-row">
-      <input type="checkbox" id="mno_ptim" value="1" %MONO_PTIM% onchange="toggleSetting('mno_ptim',this.checked)">
-      <label for="mno_ptim">Show remaining time while printing</label>
+      <input type="checkbox" id="mno_timalt" value="1" %MONO_TIMALT% onchange="toggleSetting('mno_timalt',this.checked,'Alternate ETA')">
+      <label for="mno_timalt">Alternate remaining time and ETA (5 s)</label>
+    </label>
+    <div class="hint" style="padding-left:28px">Alternating only applies while the remaining time is shown.</div>
+  </div>
+
+  <div class="card mono-card">
+    <div class="card-head"><div><h3>Idle screen</h3><p>The clock screensaver and what it shows.</p></div></div>
+    <label class="check-row">
+      <input type="checkbox" id="mno_clk" value="1" %MONO_CLK% onchange="toggleSetting('mno_clk',this.checked,'Big clock')">
+      <label for="mno_clk">Show big clock (off = big temps)</label>
     </label>
     <label class="check-row">
-      <input type="checkbox" id="mno_dtmp" value="1" %MONO_DTMP% onchange="toggleSetting('mno_dtmp',this.checked)">
-      <label for="mno_dtmp">Show temps on the Done screen</label>
+      <input type="checkbox" id="mno_stat" value="1" %MONO_STAT% onchange="toggleSetting('mno_stat',this.checked,'Connection icon')">
+      <label for="mno_stat">Show connection icon (X / circle)</label>
     </label>
     <label class="check-row">
-      <input type="checkbox" id="mno_clk" value="1" %MONO_CLK% onchange="toggleSetting('mno_clk',this.checked)">
-      <label for="mno_clk">Show big clock when idle (off = big temps)</label>
+      <input type="checkbox" id="mno_wen" value="1" %MONO_WEN% onchange="toggleSetting('mno_wen',this.checked,'Weather')">
+      <label for="mno_wen">Show weather icon + temperature</label>
     </label>
+    <div class="field">
+      <label for="mno_wkey">Weather API key (OpenWeatherMap)</label>
+      <input type="text" id="mno_wkey" class="mono" value="%MONO_WKEY%" placeholder="32-char API key" maxlength="64"
+             onchange="toggleSetting('mno_wkey',this.value,'Weather key')">
+    </div>
+    <div class="field">
+      <label for="mno_wq">Location</label>
+      <input type="text" id="mno_wq" class="mono" value="%MONO_WQ%" placeholder="Madrid,ES" maxlength="63"
+             onchange="toggleSetting('mno_wq',this.value,'Weather location')">
+      <div class="hint">Free key: sign up at <a href="https://openweathermap.org/appid" target="_blank" style="color:var(--accent)">openweathermap.org</a> and copy it from <em>API keys</em>. Use City,CC with no spaces. Weather only shows while the big clock is on; key and location save when you leave the field.</div>
+    </div>
     <label class="check-row">
-      <input type="checkbox" id="mno_stat" value="1" %MONO_STAT% onchange="toggleSetting('mno_stat',this.checked)">
-      <label for="mno_stat">Show connection icon on the clock (X / circle)</label>
+      <input type="checkbox" id="mno_hot" value="1" %MONO_HOT% onchange="toggleSetting('mno_hot',this.checked,'HOT warning')">
+      <label for="mno_hot">Show HOT warning</label>
     </label>
+    <div class="hint" style="padding-left:28px">Only appears on the big-temps screen (big clock off).</div>
+  </div>
+
+  <div class="card mono-card">
+    <div class="card-head"><div><h3>Done screen</h3><p>Shown when the printer reports FINISH.</p></div></div>
     <label class="check-row">
-      <input type="checkbox" id="mno_hot" value="1" %MONO_HOT% onchange="toggleSetting('mno_hot',this.checked)">
-      <label for="mno_hot">Show HOT warning when idle</label>
+      <input type="checkbox" id="mno_dtmp" value="1" %MONO_DTMP% onchange="toggleSetting('mno_dtmp',this.checked,'Done temps')">
+      <label for="mno_dtmp">Show cooldown temperatures</label>
     </label>
+    <div class="field">
+      <label for="mno_fmins">Show the Done screen for</label>
+      <div class="hstack" style="gap:var(--sp-2)">
+        <input type="number" id="mno_fmins" min="0" max="999" value="%FMINS%" style="max-width:120px"
+               onchange="saveDoneMins(this)">
+        <span class="text-dim small">minutes &middot; 0 = until the next print</span>
+      </div>
+      <div class="hint">The printer keeps reporting FINISH after a job ends, so this is what returns the OLED to the clock.</div>
+    </div>
+  </div>
+
+  <div class="card mono-card">
+    <div class="card-head"><div><h3>Startup &amp; panel</h3><p>Boot screen and hardware contrast.</p></div></div>
     <label class="check-row">
-      <input type="checkbox" id="mno_splash" value="1" %MONO_SPLASH% onchange="toggleSetting('mno_splash',this.checked)">
+      <input type="checkbox" id="mno_splash" value="1" %MONO_SPLASH% onchange="toggleSetting('mno_splash',this.checked,'Boot screen')">
       <label for="mno_splash">Show boot screen with WiFi/IP (off = straight to clock)</label>
     </label>
-    <div class="field" style="margin-top:var(--sp-3)">
-      <label>Weather on the idle clock (OpenWeatherMap, every 15 min while idle)</label>
-      <label class="check-row">
-        <input type="checkbox" id="mno_wen" value="1" %MONO_WEN% onchange="toggleSetting('mno_wen',this.checked)">
-        <label for="mno_wen">Show weather icon + temperature</label>
-      </label>
-      <label for="mno_wkey">Weather API key (OpenWeatherMap)</label>
-      <input type="text" id="mno_wkey" class="mono" value="%MONO_WKEY%" placeholder="32-char API key" maxlength="64">
-      <label for="mno_wq" style="margin-top:var(--sp-2)">Location</label>
-      <input type="text" id="mno_wq" class="mono" value="%MONO_WQ%" placeholder="Madrid,ES" maxlength="63">
-      <div class="hint">Free key: sign up at <a href="https://openweathermap.org/appid" target="_blank" style="color:var(--accent)">openweathermap.org</a> and copy it from <em>API keys</em>. Use City,CC with no spaces. Key + location save with Apply Display Settings below.</div>
-    </div>
     <div class="field">
       <label class="hstack" style="justify-content:space-between" for="mno_cont"><span>OLED contrast</span><span class="mono text-dim" id="mno_contVal">%MONO_CONT%</span></label>
       <input type="range" id="mno_cont" min="20" max="255" step="1" value="%MONO_CONT%"
              oninput="document.getElementById('mno_contVal').textContent=this.value"
-             onchange="toggleSetting('mno_cont',this.value)">
+             onchange="toggleSetting('mno_cont',this.value,'OLED contrast')">
       <div class="hint">SH1106 contrast, 255 is brightest (default). Applies instantly, no reboot.</div>
     </div>
   </div>
@@ -680,7 +706,7 @@ R"rawliteral(
     <p class="hint">Nozzle, bed and chamber arcs (plus their value text) switch to the warning color once the reading reaches this share of the gauge's full scale. The Cards style colors its temperatures the same way.</p>
   </div>
 
-  <div class="action-bar" style="border:none;padding:0;margin:0">
+  <div class="action-bar" id="printscreenApply" style="border:none;padding:0;margin:0">
     <button type="button" class="btn btn-primary" onclick="applyDisplay()">Apply Display Settings</button>
   </div>
 </div>

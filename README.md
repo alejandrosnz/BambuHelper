@@ -132,7 +132,7 @@ The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-`
    - **LAN Direct:** printer IP + LAN access code
    - **Bambu Cloud:** sign in with email code, password, or an access token
 5. Under **Clock**, set the timezone (DST switches automatically) and, if you want it, 24-hour time.
-6. Tune the display under **Print screen → Mono OLED** (see [Settings](#settings)).
+6. Tune the display under **OLED** (see [Settings](#settings)).
 
 > The web portal has no password and runs over plain HTTP. On networks you do not fully trust, prefer the email-code or token cloud login. See the upstream README for the full cloud security notes.
 
@@ -145,7 +145,7 @@ The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-`
 | Heating | `PREPARE` | Title, nozzle/bed temps (current/target), progress bar |
 | Printing | `RUNNING` | 2-line job title, `%` + layer, progress bar, current stage + remaining time / ETA |
 | Pause | `PAUSE` | Same layout with a pause icon and blinking progress fill |
-| Done | `FINISH` | 2-line title, boxed `DONE`, optional cooldown temps; returns to the idle screen after ~3 minutes |
+| Done | `FINISH` | 2-line title, boxed `DONE`, optional cooldown temps; returns to the idle screen after the configured Done duration (default ~3 min, `0` = until the next print) |
 | Error | `FAILED` / print error | `ERR`, code/state and job name |
 | Idle / screensaver | Printer idle | Big clock (or big temps when NTP is down), optional weather icon + temperature, status icon (X / circle), optional `HOT` warning |
 
@@ -155,23 +155,26 @@ The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-`
 
 ## Settings
 
-### Mono OLED card (Print screen → Mono OLED)
+### OLED cards
 
-| Setting | Default | What it does |
-|---|---|---|
-| Show Layer line while printing | On | `layer/total` next to the percentage |
-| Show progress bar while printing | On | 6 px progress bar above the bottom row |
-| Alternate remaining time and ETA bottom-right (5 s) | On | Switches between `-1h05m` and the wall-clock finish time |
-| Show remaining time while printing | On | Off = the current stage uses the full width |
-| Show temps on the Done screen | Off | Nozzle/bed cooldown row on the Done screen |
-| Show big clock when idle (off = big temps) | On | Idle screen shows the clock, or large temps when off |
-| Show connection icon on the clock (X / circle) | Off | Network / printer liveness indicator |
-| Show HOT warning when idle | Off | Warns when the nozzle is above 50 °C while idle |
-| Show boot screen with WiFi/IP (off = straight to clock) | On | AP mode and WiFi failures still show the boot screen |
-| Show weather icon + temperature | Off | OpenWeatherMap on the idle clock |
-| Weather API key | *(empty)* | Free OpenWeatherMap key |
-| Location | `Madrid,ES` | `City,CC`, no spaces |
-| OLED contrast | 255 | SH1106 hardware contrast, range 20–255, applies instantly |
+The **OLED** section is split into four cards: **While printing**, **Idle screen**, **Done screen**, and **Startup & panel**. Every control saves as soon as you change it.
+
+| Card | Setting | Default | What it does |
+|---|---|---|---|
+| While printing | Show Layer line | On | `layer/total` next to the percentage |
+| While printing | Show progress bar | On | 6 px progress bar above the bottom row |
+| While printing | Show remaining time | On | Off = the current stage uses the full width |
+| While printing | Alternate remaining time and ETA (5 s) | On | Switches between `-1h05m` and the wall-clock finish time; only when remaining time is on |
+| Idle screen | Show big clock | On | Idle screen shows the clock, or large temps when off |
+| Idle screen | Show connection icon | Off | Network / printer liveness indicator |
+| Idle screen | Show weather icon + temperature | Off | OpenWeatherMap on the idle clock |
+| Idle screen | Weather API key | *(empty)* | Free OpenWeatherMap key |
+| Idle screen | Location | `Madrid,ES` | `City,CC`, no spaces |
+| Idle screen | Show HOT warning | Off | Warns when the nozzle is above 50 °C while idle; only on the big-temps screen (big clock off) |
+| Done screen | Show cooldown temperatures | Off | Nozzle/bed cooldown row on the Done screen |
+| Done screen | Show the Done screen for | 3 minutes | Minutes before returning to idle; `0` = until the next print |
+| Startup & panel | Show boot screen with WiFi/IP | On | AP mode and WiFi failures still show the boot screen |
+| Startup & panel | OLED contrast | 255 | SH1106 hardware contrast, range 20–255, applies instantly |
 
 ### Other settings that affect the mono display
 
@@ -185,7 +188,7 @@ TFT-only sections (Display, After print, Colors, Hardware, Power) are hidden aut
 ### Weather
 
 - Free OpenWeatherMap key: <https://openweathermap.org/appid>
-- Enable **Show weather icon + temperature**, paste the key, set the location as `City,CC` (for example `Madrid,ES`), then save.
+- Enable **Show weather icon + temperature**, paste the key, and set the location as `City,CC` (for example `Madrid,ES`). The key and location save when you leave the field.
 - The device polls only while the idle clock is visible, every 15 minutes. The fetch runs in a background task, so it never blocks MQTT or the web server.
 - The API key is stored locally and deliberately **not** included in JSON settings backups.
 

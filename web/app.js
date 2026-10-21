@@ -2,7 +2,7 @@
 var SECTION_LABELS = {
   printer: 'Printer Settings',
   display: 'Screen',
-  printscreen: 'Print screen',
+  printscreen: 'OLED',
   afterprint: 'After print',
   clock: 'Clock',
   colors: 'Colors',
@@ -1193,9 +1193,9 @@ function applyDisplay(){
   p.append('nbright', document.getElementById('nbright').value);
   p.append('ssbright', document.getElementById('ssbright').value);
   p.append('rotation', document.getElementById('rotation').value);
-  var ap = document.getElementById('afterprint').value;
   if (document.getElementById('keepon').checked) p.append('keepon', '1');
-  p.append('fmins', ap === 'custom' ? document.getElementById('fmins').value : ap);
+  /* The Done duration is owned by the OLED Done card (mno_fmins) and saves
+     instantly. The hidden mono After-print select must not overwrite it. */
   if (document.getElementById('afterfin').value !== 'off') p.append('clock', '1');
   if (document.getElementById('dack').checked) p.append('dack', '1');
   if (document.getElementById('fintm').checked) p.append('fintm', '1');
@@ -1400,10 +1400,11 @@ function applyCardsHints(){
   });
 }
 
-function toggleSetting(key, on){
+function toggleSetting(key, on, label){
   var val = (on === true) ? '1' : (on === false) ? '0' : String(on);
+  var name = label || key;
   fetch('/save/toggle',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'key='+key+'&val='+encodeURIComponent(val)})
-    .then(function(r){if(r.ok)showToast(typeof on==='boolean'?(on?key+' ON':key+' OFF'):key+' saved');else showToast('Error');})
+    .then(function(r){if(r.ok)showToast(typeof on==='boolean'?(on?name+' ON':name+' OFF'):name+' saved');else showToast('Error');})
     .catch(function(e){showToast('Toggle failed');console.warn('toggleSetting:',e);});
 }
 
@@ -1439,16 +1440,67 @@ function applyMonoVisibility(){
   hideCardByHeading('sec-printer', 'Gauge Layout');
   hideCardByHeading('sec-printer', 'Chamber light');
   hideCardByHeading('sec-printer', 'Printer rotation');
-  // Print screen section: keep only the Mono OLED card.
+  // OLED section: keep the four mono cards, hide the TFT-era cards and the
+  // Apply button (every control in those cards saves instantly).
   var ps = document.getElementById('sec-printscreen');
   if (ps){
     var cards = ps.querySelectorAll('.card');
     for (var c = 0; c < cards.length; c++){
-      if (!cards[c].querySelector('#mno_lyr')) cards[c].hidden = true;
+      if (!cards[c].classList.contains('mono-card')) cards[c].hidden = true;
     }
+    var apply = document.getElementById('printscreenApply');
+    if (apply) apply.hidden = true;
   }
   // Clock section: the printer name/IP footer is a TFT status-bar concept.
   hideCardByHeading('sec-clock', 'Clock screen info');
+}
+
+/* Keep the OLED controls in a state that matches their dependencies: the
+   alternate ETA needs the remaining time, and weather needs the big clock. */
+function toggleMonoOptions(){
+  var ptim = document.getElementById('mno_ptim');
+  var timalt = document.getElementById('mno_timalt');
+  if (ptim && timalt){
+    timalt.disabled = !ptim.checked;
+    var altRow = timalt.closest('.check-row');
+    if (altRow) altRow.style.opacity = ptim.checked ? '1' : '0.45';
+  }
+
+  var clk = document.getElementById('mno_clk');
+  var wen = document.getElementById('mno_wen');
+  var clockOn = !!(clk && clk.checked);
+  var weatherOn = clockOn && !!(wen && wen.checked);
+  if (wen){
+    wen.disabled = !clockOn;
+    var wenRow = wen.closest('.check-row');
+    if (wenRow) wenRow.style.opacity = clockOn ? '1' : '0.45';
+  }
+  var fields = [document.getElementById('mno_wkey'), document.getElementById('mno_wq')];
+  for (var i = 0; i < fields.length; i++){
+    var el = fields[i];
+    if (!el) continue;
+    el.disabled = !weatherOn;
+    var field = el.closest('.field');
+    if (field) field.style.opacity = weatherOn ? '1' : '0.45';
+  }
+}
+
+function initMonoOptionDeps(){
+  var ids = ['mno_ptim', 'mno_clk', 'mno_wen'];
+  for (var i = 0; i < ids.length; i++){
+    var el = document.getElementById(ids[i]);
+    if (el) el.addEventListener('change', toggleMonoOptions);
+  }
+  toggleMonoOptions();
+}
+
+/* Keep the Done duration inside the range the firmware accepts (0-999). */
+function saveDoneMins(el){
+  var v = parseInt(el.value, 10);
+  if (isNaN(v)) return;
+  v = Math.max(0, Math.min(999, v));
+  el.value = v;
+  toggleSetting('mno_fmins', v, 'Done duration');
 }
 
 /* ============ Printer errors (HMS + print_error) ============
@@ -2057,6 +2109,7 @@ applyThemeMode(document.documentElement.getAttribute('data-theme') || 'dark');
   initDirtyTracking();
   applyCardsHints();
   applyMonoVisibility();
+  initMonoOptionDeps();
   // Initial section: URL hash, else last visited (localStorage), else printer.
   // Printer Errors only exists on boards that compiled its markup in, so it
   // joins the list only when the page actually carries it. On mono the TFT
