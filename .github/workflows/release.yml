@@ -97,12 +97,42 @@ jobs:
       - name: Build and package OTA asset
         run: python tools/release.py
 
+      # Runs before any irreversible step (commit/tag/release) and in dry runs
+      # too. Do not hardcode the filename: whatever release.py emits is fine as
+      # long as there is exactly one OTA asset and it carries the requested
+      # version.
+      - name: Validate OTA asset
+        id: asset
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(firmware/*/*-ota.bin)
+          if [ "${#assets[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one OTA asset under firmware/, found ${#assets[@]}."
+            if [ "${#assets[@]}" -gt 0 ]; then printf '  %s\n' "${assets[@]}"; fi
+            exit 1
+          fi
+          asset="${assets[0]}"
+          if [ ! -s "$asset" ]; then
+            echo "::error::$asset is empty."
+            exit 1
+          fi
+          if [[ "$(basename "$asset")" != *-"$VERSION"-ota.bin ]]; then
+            echo "::error::Asset $asset does not match version $VERSION."
+            exit 1
+          fi
+          size="$(stat -c%s "$asset")"
+          echo "path=$asset" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$asset")" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "Validated asset: $asset (${size} B)"
+
       - name: Upload dry-run firmware
         if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
           name: BambuHelper-OLED-ota-dry-run-${{ github.run_number }}
-          path: firmware/*/*-ota.bin
+          path: ${{ steps.asset.outputs.path }}
           if-no-files-found: error
           retention-days: 14
 
@@ -134,11 +164,7 @@ jobs:
           NOTES: ${{ inputs.notes }}
         run: |
           set -euo pipefail
-          ASSET="firmware/$VERSION/BambuHelper-OLED-sh1106_esp32c3-$VERSION-ota.bin"
-          if [ ! -f "$ASSET" ]; then
-            echo "::error::Expected asset $ASSET was not produced."
-            exit 1
-          fi
+          ASSET="${{ steps.asset.outputs.path }}"
           if [ -n "${NOTES:-}" ]; then
             gh release create "$VERSION" "$ASSET" \
               --target "${{ steps.publish.outputs.sha }}" \
@@ -160,11 +186,11 @@ jobs:
             echo "- Version: \`${VERSION:-unknown}\`"
             echo "- Dry run: \`${{ inputs.dry_run }}\`"
             echo "- Commit: \`${{ steps.publish.outputs.sha || steps.base.outputs.sha }}\`"
+            echo "- Asset: \`${{ steps.asset.outputs.name }}\` (${{ steps.asset.outputs.size }} B)"
             if [ "${{ inputs.dry_run }}" = "true" ]; then
               echo "- Result: built and packaged only. No commit, tag or release was created."
               echo "- Firmware: download the **BambuHelper-OLED-ota-dry-run-${{ github.run_number }}** artifact from this run."
             else
               echo "- Release: https://github.com/${{ github.repository }}/releases/tag/${VERSION}"
-              echo "- Asset: \`BambuHelper-OLED-sh1106_esp32c3-${VERSION}-ota.bin\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
