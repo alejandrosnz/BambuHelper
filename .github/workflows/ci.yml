@@ -1,0 +1,59 @@
+name: CI
+
+# Compile every pull request and every push to main. This is the fast gate:
+# it does not tag, commit or publish anything, it only proves the firmware
+# builds and that the resulting image fits the OTA slot.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the same PR/branch cancels the previous run.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build sh1106_esp32c3
+        run: pio run -e sh1106_esp32c3
+
+      # Same packaging path as the release workflow, so a PR fails here (not
+      # at release time) if the image outgrows the OTA slot.
+      - name: Package OTA image
+        run: python tools/release.py --skip-build
+
+      - name: Upload OTA image
+        uses: actions/upload-artifact@v4
+        with:
+          name: BambuHelper-OLED-ota-${{ github.sha }}
+          path: firmware/*/*-ota.bin
+          if-no-files-found: error
+          retention-days: 7
