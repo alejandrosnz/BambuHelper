@@ -378,6 +378,11 @@ bool isDisplayForceRedraw() { return forceRedraw; }
 //  Init
 // ---------------------------------------------------------------------------
 void initDisplay() {
+#ifdef BOARD_IS_MONO
+  // The mono OLED initialises itself in mono_display.cpp; there is no colour
+  // panel to bring up.
+  return;
+#endif
 
 #if defined(BOARD_IS_WS28C)
   // LCD reset, LCD CS and the touch reset all hang off a TCA9554 @0x20 whose
@@ -5893,6 +5898,11 @@ static bool glowScreenEligible() {
 //  Main update (called from loop)
 // ---------------------------------------------------------------------------
 void updateDisplay() {
+#ifdef BOARD_IS_MONO
+  // The mono OLED renders from monoDisplayTick(); nothing here applies to it.
+  return;
+#endif
+
   // Night blackout (nightBrightness == 0): paint the panel black once and stop
   // rendering for the rest of the window. Backlight 0 alone is not enough -
   // boards with BACKLIGHT_PIN < 0 (7-pin round GC9A01) have no dimming at all,
