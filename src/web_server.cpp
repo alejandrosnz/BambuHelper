@@ -810,6 +810,18 @@ static void handleToggleSetting() {
   else if (key == "mno_hot") monoSettings.showHotIdle = on;
   else if (key == "mno_splash") monoSettings.showSplash = on;
   else if (key == "mno_wen") monoSettings.weatherEnabled = on;
+  else if (key == "mno_fmins") {
+    dpSettings.finishDisplayMins =
+        (uint16_t)constrain(server.arg("val").toInt(), 0, 999);
+  }
+  else if (key == "mno_wkey") {
+    sanitizeGaugeLabel(server.arg("val").c_str(), monoSettings.weatherKey,
+                       sizeof(monoSettings.weatherKey));
+  }
+  else if (key == "mno_wq") {
+    sanitizeGaugeLabel(server.arg("val").c_str(), monoSettings.weatherQuery,
+                       sizeof(monoSettings.weatherQuery));
+  }
   else if (key == "mno_cont") {
     monoSettings.oledContrast =
         (uint8_t)constrain(server.arg("val").toInt(), MONO_OLED_CONTRAST_MIN, 255);

@@ -28,7 +28,7 @@
 //   MONO_MOCK                     1 = "mock ..." commands over Serial
 //   MONO_MOCK_AUTO                1 = boot into mock cycle mode
 //
-// Runtime row toggles (web portal Print screen > Mono OLED, monoSettings in
+// Runtime row toggles (web portal OLED, monoSettings in
 // settings.h, defaults = tuned mono layout: temps on Done/HotIdle/StatusIdle
 // off, the rest on, weather off): showLayer, showBar, showTimePrinting,
 // showTimeAlt, showTempsDone, showClockIdle, showStatusIdle (X/circle on the
