@@ -75,7 +75,12 @@ jobs:
               sys.exit("FW_VERSION not found in include/config.h")
           path.write_text(updated, encoding="utf-8", newline="\n")
           PY
-          grep -q "#define FW_VERSION \"$VERSION\"" include/config.h
+          # Match any amount of whitespace: config.h aligns the value in a column.
+          if ! grep -Eq "#define[[:space:]]+FW_VERSION[[:space:]]+\"$VERSION\"" include/config.h; then
+            echo "::error::include/config.h does not define FW_VERSION \"$VERSION\" after the rewrite."
+            grep -n "FW_VERSION" include/config.h || true
+            exit 1
+          fi
           git diff -- include/config.h
 
       - name: Set up Python
