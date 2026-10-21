@@ -406,6 +406,23 @@ static void fmtClockMode(char *dst, size_t n, bool *pm) {
     snprintf(dst, n, "%d:%02d", h, tmv.tm_min);
 }
 
+// Date line above the idle clock. Same six formats the Clock section offers;
+// the SH1106 has no colour or size choice, so this is always size 1 (6x8 px).
+static void fmtClockDate(char *dst, size_t n) {
+  if (!dst || n == 0) return;
+  dst[0] = '\0';
+  static const char *const formats[] = {
+      "%d.%m.%Y", "%d-%m-%Y", "%m/%d/%Y",
+      "%Y-%m-%d", "%d %b %Y", "%b %d, %Y",
+  };
+  uint8_t f = netSettings.dateFormat;
+  if (f >= sizeof(formats) / sizeof(formats[0])) f = 0;
+  time_t now = time(nullptr);
+  struct tm tmv;
+  localtime_r(&now, &tmv);
+  strftime(dst, n, formats[f], &tmv);
+}
+
 // --- One render per screen (all end with display()) ----------------------------
 static void wrapJobName2Lines(const String &clean, String &l1, String &l2);
 
@@ -666,12 +683,25 @@ static void renderIdle(const BambuState &st) {
   if (monoSettings.showClockIdle) {
     // Spotify clock (ESP-Spotify-OLED printLocalTime): default font, 30x30
     // weather icon at (23,32), size-2 temperature at (60,40) with the degree
-    // bitmap. No printer temps here by design. With the weather row visible
-    // the clock sits at the Spotify-ish top anchor (y=5); with weather off
-    // the 24 px clock centers vertically on its own ((64-24)/2 = 20).
+    // bitmap. No printer temps here by design. The small date owns the top
+    // 8 px, so with it visible the clock (and weather block) shift down a few
+    // pixels; with the date hidden the old anchors stay.
     bool wxShown = monoSettings.weatherEnabled || monoMockActive();
-    int clkY = wxShown ? 5 : 20;
+    bool dateShown = ntpOk() && !dispSettings.hideClockDate;
+    int clkY = wxShown ? (dateShown ? 9 : 5) : (dateShown ? 24 : 20);
+    int wxIconY = dateShown ? 34 : 32;
+    int wxTempY = dateShown ? 42 : 40;
     oled.setFont();
+    oled.setTextSize(1);
+    if (dateShown) {
+      char date[24];
+      fmtClockDate(date, sizeof(date));
+      int16_t dx1, dy1;
+      uint16_t dw, dh;
+      oled.getTextBounds(date, 0, 0, &dx1, &dy1, &dw, &dh);
+      oled.setCursor((OLED_WIDTH - (int)dw) / 2, 0);
+      oled.print(date);
+    }
     oled.setTextSize(3);
     if (ntpOk()) {
       char clk[10];
@@ -707,13 +737,13 @@ static void renderIdle(const BambuState &st) {
       else
         snprintf(tmp, sizeof(tmp), "--");
       size_t n = strlen(tmp);
-      oled.drawBitmap(23, 32, monoWeatherIcon(have ? w.icon : ""),
+      oled.drawBitmap(23, wxIconY, monoWeatherIcon(have ? w.icon : ""),
                       MONO_WX_ICON_W, MONO_WX_ICON_H, SH110X_WHITE);
       oled.setTextSize(2);
-      oled.setCursor(60, 40);
+      oled.setCursor(60, wxTempY);
       oled.print(tmp);
-      oled.drawBitmap(60 + 2 + n * 12, 40, monoDegreeBmp(), 8, 10, SH110X_WHITE);
-      oled.setCursor(60 + 2 + 9 + n * 12, 40);
+      oled.drawBitmap(60 + 2 + n * 12, wxTempY, monoDegreeBmp(), 8, 10, SH110X_WHITE);
+      oled.setCursor(60 + 2 + 9 + n * 12, wxTempY);
       oled.print("C");
     }
     oled.setFont();
@@ -852,6 +882,8 @@ struct MonoSig {
   char job[128];  // full clean-name cap (subtaskName[128]); must track, or a
                   // renamed job that shares its prefix never repaints
   int clockMin;  // for the idle clock
+  uint8_t dateFmt;  // date line format (repaints the idle clock)
+  bool hideDate;    // hide-date toggle (repaints the idle clock)
   int8_t printTimeAlt;  // printing remaining/ETA alternation phase (repaints on toggle)
   uint16_t monoFlags;  // web toggles bitmask: a flip must repaint immediately
   int wtemp;       // weather temp on the idle clock
@@ -902,6 +934,8 @@ static MonoSig makeSig(MonoScreen scr, MonoScreen rawScr, const BambuState &st) 
           ? (int8_t)((millis() / (unsigned long)MONO_END_TIME_ALT_MS) % 2)
           : 0;
   s.monoFlags = monoFlagsNow();
+  s.dateFmt = netSettings.dateFormat;
+  s.hideDate = dispSettings.hideClockDate;
   MonoWeatherData w;
   if (monoWeatherGet(w)) {
     s.wtemp = tempInt(w.tempC);
@@ -927,6 +961,7 @@ static bool sigSame(const MonoSig &a, const MonoSig &b) {
          a.nzl == b.nzl && a.nzlT == b.nzlT && a.bed == b.bed && a.bedT == b.bedT &&
          a.err == b.err && a.connected == b.connected && strcmp(a.job, b.job) == 0 &&
          a.clockMin == b.clockMin &&
+         a.dateFmt == b.dateFmt && a.hideDate == b.hideDate &&
          a.printTimeAlt == b.printTimeAlt &&
          a.monoFlags == b.monoFlags && a.wtemp == b.wtemp &&
          strcmp(a.wicon, b.wicon) == 0;

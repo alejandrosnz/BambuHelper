@@ -1088,8 +1088,6 @@ function applyTheme(name){
   document.getElementById('clr_bg').value = t.bg;
   document.getElementById('clr_track').value = t.track;
   document.getElementById('clr_pbar').value = t.prg.a;
-  document.getElementById('clk_time').value = t.clkt;
-  document.getElementById('clk_date').value = t.clkd;
   setAccentColors(t.eta, t.fin, t.stok, t.pname, t.txt, t.txtd);
   setDoorColors(t.dorc, t.doro);
   for (var i = 0; i < GAUGE_KEYS.length; i++){
@@ -1201,7 +1199,6 @@ function applyDisplay(){
   if (document.getElementById('fintm').checked) p.append('fintm', '1');
   if (document.getElementById('kps').checked) p.append('kps', '1');
   if (document.getElementById('abar').checked) p.append('abar', '1');
-  if (document.getElementById('pong').checked) p.append('pong', '1');
   if (document.getElementById('slbl').checked) p.append('slbl', '1');
   p.append('timem', document.getElementById('timem').value);
   if (document.getElementById('fanmp').checked) p.append('fanmp', '1');
@@ -1224,10 +1221,6 @@ function applyDisplay(){
   p.append('clr_txtd', document.getElementById('clr_txtd').value);
   p.append('clr_dorc', document.getElementById('clr_dorc').value);
   p.append('clr_doro', document.getElementById('clr_doro').value);
-  p.append('clk_time', document.getElementById('clk_time').value);
-  p.append('clk_date', document.getElementById('clk_date').value);
-  p.append('clk_size', document.getElementById('clk_size').value);
-  p.append('clk_dsize', document.getElementById('clk_dsize').value);
   if (document.getElementById('clk_hidedate').checked) p.append('clk_hidedate', '1');
   p.append('noz_max', document.getElementById('noz_max').value);
   p.append('bed_max', document.getElementById('bed_max').value);
@@ -2055,11 +2048,6 @@ function toggleAfterPrint(){
   document.getElementById('customMinsWrap').style.display = (v === 'custom') ? 'block' : 'none';
   // Every timeout below is meaningless when the display never sleeps.
   document.getElementById('afterPrintWrap').style.display = keepon ? 'none' : 'block';
-  var pong = document.getElementById('pong');
-  var row = document.getElementById('pong-row');
-  var showClock = !keepon && document.getElementById('afterfin').value !== 'off';
-  pong.disabled = !showClock;
-  if (row) row.style.opacity = showClock ? '1' : '0.4';
 }
 
 /* ============ Edge glow reveal ============ */

@@ -147,7 +147,7 @@ The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-`
 | Pause | `PAUSE` | Same layout with a pause icon and blinking progress fill |
 | Done | `FINISH` | 2-line title, boxed `DONE`, optional cooldown temps; returns to the idle screen after the configured Done duration (default ~3 min, `0` = until the next print) |
 | Error | `FAILED` / print error | `ERR`, code/state and job name |
-| Idle / screensaver | Printer idle | Big clock (or big temps when NTP is down), optional weather icon + temperature, status icon (X / circle), optional `HOT` warning |
+| Idle / screensaver | Printer idle | Big clock with a small date line above it (or big temps when the clock is off), optional weather icon + temperature, status icon (X / circle), optional `HOT` warning |
 
 - Static screens refresh once per second; marquee and blink run at ~10 fps.
 - The job title wraps to two 11-character lines and shows `...` on overflow.
@@ -178,7 +178,7 @@ The **OLED** section is split into four cards: **While printing**, **Idle screen
 
 ### Other settings that affect the mono display
 
-- **Clock:** timezone and 24-hour format (also drives the ETA / end time on the print screen).
+- **Clock:** timezone, 24-hour format, and the small date line above the clock (format picker plus a time-only toggle). The SH1106 has no colour or font-size controls.
 - **Printer:** LAN or Bambu Cloud connection and the printer name.
 - **WiFi & System:** WiFi, DHCP/static IP, mDNS hostname, JSON settings backup and OTA.
 - **Diagnostics:** serial log, heap and connection status.
