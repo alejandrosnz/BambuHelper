@@ -1,0 +1,196 @@
+name: Release
+
+# Manual, from the Actions tab (Run workflow). The job always builds the current
+# contents of main; it never releases an arbitrary branch.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Firmware version to release (vX.Y.Z, e.g. v3.9.1)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: build and package only, do not commit, tag or release'
+        required: true
+        type: boolean
+        default: true
+      notes:
+        description: 'Release notes (markdown). Leave empty to auto-generate from commits.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  # Serialize releases: every non-dry run commits FW_VERSION to main before it
+  # publishes, so two overlapping runs would fight over the same branch.
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate version
+        id: base
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="$(printf '%s' "$VERSION" | tr -d '[:space:]')"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid version '$VERSION'. Use vX.Y.Z, for example v3.9.1."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists. Bump the version or delete the tag first."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Apply FW_VERSION to include/config.h
+        run: |
+          set -euo pipefail
+          python - "$VERSION" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          version = sys.argv[1]
+          path = pathlib.Path("include/config.h")
+          text = path.read_text(encoding="utf-8")
+          pattern = re.compile(r'(#define\s+FW_VERSION\s+")[^"]+(")')
+          updated, count = pattern.subn(rf'\g<1>{version}\g<2>', text, count=1)
+          if count != 1:
+              sys.exit("FW_VERSION not found in include/config.h")
+          path.write_text(updated, encoding="utf-8", newline="\n")
+          PY
+          grep -q "#define FW_VERSION \"$VERSION\"" include/config.h
+          git diff -- include/config.h
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build and package OTA asset
+        run: python tools/release.py
+
+      # Runs before any irreversible step (commit/tag/release) and in dry runs
+      # too. Do not hardcode the filename: whatever release.py emits is fine as
+      # long as there is exactly one OTA asset and it carries the requested
+      # version.
+      - name: Validate OTA asset
+        id: asset
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(firmware/*/*-ota.bin)
+          if [ "${#assets[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one OTA asset under firmware/, found ${#assets[@]}."
+            if [ "${#assets[@]}" -gt 0 ]; then printf '  %s\n' "${assets[@]}"; fi
+            exit 1
+          fi
+          asset="${assets[0]}"
+          if [ ! -s "$asset" ]; then
+            echo "::error::$asset is empty."
+            exit 1
+          fi
+          if [[ "$(basename "$asset")" != *-"$VERSION"-ota.bin ]]; then
+            echo "::error::Asset $asset does not match version $VERSION."
+            exit 1
+          fi
+          size="$(stat -c%s "$asset")"
+          echo "path=$asset" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$asset")" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "Validated asset: $asset (${size} B)"
+
+      - name: Upload dry-run firmware
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: BambuHelper-OLED-ota-dry-run-${{ github.run_number }}
+          path: ${{ steps.asset.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit version bump
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "${{ steps.base.outputs.sha }}" ]; then
+            echo "::error::main moved while this job was building. Re-run the workflow against the new main."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- include/config.h; then
+            echo "FW_VERSION is already $VERSION; nothing to commit."
+          else
+            git add include/config.h
+            git commit -m "release: $VERSION"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        id: publish
+
+      - name: Create GitHub release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          ASSET="${{ steps.asset.outputs.path }}"
+          if [ -n "${NOTES:-}" ]; then
+            gh release create "$VERSION" "$ASSET" \
+              --target "${{ steps.publish.outputs.sha }}" \
+              --title "BambuHelper-OLED $VERSION" \
+              --notes "$NOTES"
+          else
+            gh release create "$VERSION" "$ASSET" \
+              --target "${{ steps.publish.outputs.sha }}" \
+              --title "BambuHelper-OLED $VERSION" \
+              --generate-notes
+          fi
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## BambuHelper-OLED release"
+            echo ""
+            echo "- Version: \`${VERSION:-unknown}\`"
+            echo "- Dry run: \`${{ inputs.dry_run }}\`"
+            echo "- Commit: \`${{ steps.publish.outputs.sha || steps.base.outputs.sha }}\`"
+            echo "- Asset: \`${{ steps.asset.outputs.name }}\` (${{ steps.asset.outputs.size }} B)"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "- Result: built and packaged only. No commit, tag or release was created."
+              echo "- Firmware: download the **BambuHelper-OLED-ota-dry-run-${{ github.run_number }}** artifact from this run."
+            else
+              echo "- Release: https://github.com/${{ github.repository }}/releases/tag/${VERSION}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -25,7 +25,7 @@ This fork replaces that layer rather than keeping it alongside the mono one: the
 
 **Original repository:** [github.com/Keralots/BambuHelper](https://github.com/Keralots/BambuHelper)
 
-This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path. For the full upstream feature set and cloud/security notes, see the original repository.
+This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono path; the fork's own releases start at **v3.9.1**. For the full upstream feature set and cloud/security notes, see the original repository.
 
 ## Hardware
 
@@ -75,10 +75,51 @@ If the upload cannot connect, hold **BOOT** while plugging the board in, then re
 
 ### Updates
 
-- **OTA from the web UI:** WiFi & System → Firmware update (GitHub Releases or a manual `.bin`)
+- **OTA from the web UI:** WiFi & System → Firmware update. The online updater reads the latest release from [github.com/alejandrosnz/BambuHelper-OLED](https://github.com/alejandrosnz/BambuHelper-OLED/releases) and installs the matching `-ota.bin` asset (for this board: `BambuHelper-OLED-sh1106_esp32c3-<version>-ota.bin`). You can also upload that file manually.
 - **USB:** repeat `pio run -e sh1106_esp32c3 -t upload`
 
 Settings are stored in NVS and survive OTA updates.
+
+### Releasing
+
+#### From GitHub Actions (recommended)
+
+Go to **Actions → Release → Run workflow** (on `main`). The workflow always checks out the current `main`, regardless of the branch selected in the UI.
+
+| Input | Meaning |
+|---|---|
+| `version` | Version to build and release, in `vX.Y.Z` form (for example `v3.9.1`). |
+| `dry_run` | **On by default.** Builds and packages the OTA asset and uploads it as a workflow artifact, but does not commit, tag or publish anything. |
+| `notes` | Optional release notes. Leave empty to auto-generate them from commits. |
+
+A real run (`dry_run` unchecked) does the following:
+
+1. Writes the requested version into `FW_VERSION` in `include/config.h`.
+2. Builds `sh1106_esp32c3` and refuses to continue if the image does not fit the OTA slot.
+3. Commits the version bump to `main` as `github-actions[bot]`.
+4. Creates the `vX.Y.Z` tag and GitHub release with `BambuHelper-OLED-sh1106_esp32c3-vX.Y.Z-ota.bin`.
+
+The job needs write access to the repository. If `main` is protected, allow `github-actions[bot]` to push (or run the local flow below). If `main` moves while the job is building, it stops before tagging; re-run it.
+
+#### Locally
+
+1. Bump `FW_VERSION` in `include/config.h` (and commit it).
+2. Build and package the OTA asset for the current version:
+
+   ```bash
+   python tools/release.py
+   ```
+
+   This writes `firmware/<version>/BambuHelper-OLED-sh1106_esp32c3-<version>-ota.bin` after checking that the image fits the 1.75 MB OTA slot. Use `--skip-build` to reuse an existing `.pio/build/sh1106_esp32c3/firmware.bin`.
+3. Create the GitHub release with the same name as the tag, e.g. `v3.9.1`:
+
+   ```bash
+   gh release create v3.9.1 \
+       firmware/v3.9.1/BambuHelper-OLED-sh1106_esp32c3-v3.9.1-ota.bin \
+       --title "BambuHelper-OLED v3.9.1" --notes "..."
+   ```
+
+The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-` and ends with `-ota.bin`, so keep that naming exactly.
 
 ## First-time setup
 

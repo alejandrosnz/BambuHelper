@@ -1826,7 +1826,8 @@ function startOta(){
   if (f.size > slotMax) { showToast('File too large (max ' + (slotMax/1048576).toFixed(2).replace(/\.?0+$/,'') + 'MB)'); return; }
   var lowerName = f.name.toLowerCase();
   var board = DEV.board.toLowerCase();
-  if (lowerName.indexOf('bambuhelper-') === 0 && lowerName.indexOf('-' + board + '-') === -1){ showToast('Selected firmware looks like a different board variant'); return; }
+  var assetPrefix = (DEV.assetPrefix || 'BambuHelper-OLED-').toLowerCase();
+  if (lowerName.indexOf(assetPrefix) === 0 && lowerName.indexOf('-' + board + '-') === -1){ showToast('Selected firmware looks like a different board variant'); return; }
   if (!confirm('Upload firmware and restart?')) return;
   var prog = document.getElementById('otaProgress');
   var bar = document.getElementById('otaBar');
@@ -1923,14 +1924,14 @@ function switchFwTab(t){
 function checkForUpdates(){
   var res = document.getElementById('updateResult'), info = document.getElementById('updateInfo');
   res.style.color = 'var(--info)'; res.textContent = 'Checking...'; info.style.display = 'none'; _autoOtaUrl = '';
-  fetch('https://api.github.com/repos/Keralots/BambuHelper/releases/latest')
+  fetch('https://api.github.com/repos/' + DEV.repo + '/releases/latest')
     .then(function(r){ if (!r.ok) throw new Error('GitHub API returned ' + r.status); return r.json(); })
     .then(function(d){
       var latest = d.tag_name, current = DEV.fw;
       function parseVer(v){ var m = v.replace(/^v/,'').match(/^(\d+)\.(\d+)(?:\.(\d+))?(.*)$/); return m ? {major:parseInt(m[1]),minor:parseInt(m[2]),patch:m[3]?parseInt(m[3]):0,pre:m[4]!==''} : null; }
       function isNewer(a, b){ var av = parseVer(a), bv = parseVer(b); if (!av || !bv) return a !== b; if (av.major !== bv.major) return av.major > bv.major; if (av.minor !== bv.minor) return av.minor > bv.minor; if (av.patch !== bv.patch) return av.patch > bv.patch; return !av.pre && bv.pre; }
       if (!isNewer(latest, current)){ res.style.color = 'var(--success)'; res.textContent = latest === current ? 'You are up to date (' + current + ')' : 'Running newer version (' + current + ')'; return; }
-      var board = DEV.board, expectedPrefix = 'BambuHelper-' + board + '-', otaBin = null;
+      var board = DEV.board, expectedPrefix = DEV.assetPrefix + board + '-', otaBin = null;
       for (var i = 0; i < d.assets.length; i++){ var n = d.assets[i].name; if (n.startsWith(expectedPrefix) && n.endsWith('-ota.bin')){ otaBin = d.assets[i]; break; } }
       var slotB = parseInt(DEV.otaSlot, 10) || 0, flashMb = parseInt(DEV.flashMb, 10) || 0;
       if (otaBin && slotB > 0 && otaBin.size > slotB){

@@ -10,6 +10,8 @@ codex/
 /firmware/
 *.map
 *.bak-*
+__pycache__/
+*.pyc
 CLAUDE.md
 VLW_FONTS_PARKED.md
 anycubic-support-plans.md
