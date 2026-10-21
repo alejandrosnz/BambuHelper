@@ -21,7 +21,7 @@ This fork replaces that layer rather than keeping it alongside the mono one: the
 | `src/mono_display.h` / `.cpp` | Screen selection, layout, drawing and change detection |
 | `src/mono_weather.h` / `.cpp` | OpenWeatherMap fetch/cache for the idle clock |
 | `include/mono_weather_icons.h` | 30×30 weather bitmaps |
-| `platformio.ini` (`mono-c3`) | Dedicated PlatformIO environment (`BOARD_IS_MONO`) |
+| `platformio.ini` (`sh1106_esp32c3`) | Dedicated PlatformIO environment (`BOARD_IS_MONO`) |
 
 **Original repository:** [github.com/Keralots/BambuHelper](https://github.com/Keralots/BambuHelper)
 
@@ -45,7 +45,7 @@ This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono
 | SDA | GPIO8 |
 | SCL | GPIO9 |
 
-- I2C address `0x3C` by default. Modules strapped to `0x3D` work by adding `-D OLED_I2C_ADDR=0x3D` to the `mono-c3` env.
+- I2C address `0x3C` by default. Modules strapped to `0x3D` work by adding `-D OLED_I2C_ADDR=0x3D` to the `sh1106_esp32c3` env.
 - No reset pin is used (`OLED_RESET=-1`); the I2C bus runs at 400 kHz.
 - Only four wires are needed. Make sure VCC is **3.3 V**, never 5 V.
 
@@ -66,9 +66,9 @@ This fork tracks upstream **v3.9.0**, with the display layer reduced to the mono
 git clone https://github.com/alejandrosnz/BambuHelper.git
 cd BambuHelper
 
-pio run -e mono-c3                  # build
-pio run -e mono-c3 -t upload        # flash over USB
-pio run -e mono-c3 -t monitor       # serial console, 115200 baud
+pio run -e sh1106_esp32c3                  # build
+pio run -e sh1106_esp32c3 -t upload        # flash over USB
+pio run -e sh1106_esp32c3 -t monitor       # serial console, 115200 baud
 ```
 
 If the upload cannot connect, hold **BOOT** while plugging the board in, then retry.
@@ -76,7 +76,7 @@ If the upload cannot connect, hold **BOOT** while plugging the board in, then re
 ### Updates
 
 - **OTA from the web UI:** WiFi & System → Firmware update (GitHub Releases or a manual `.bin`)
-- **USB:** repeat `pio run -e mono-c3 -t upload`
+- **USB:** repeat `pio run -e sh1106_esp32c3 -t upload`
 
 Settings are stored in NVS and survive OTA updates.
 
