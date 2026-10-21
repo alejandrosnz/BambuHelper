@@ -2,7 +2,9 @@
 #define DISPLAY_EDGE_GLOW_H
 
 #include <Arduino.h>
+#ifndef BOARD_IS_MONO
 #include <LovyanGFX.hpp>
+#endif
 
 // Edge glow: animated border light announcing print complete, print failed, or
 // a printer error. The controller latches per-slot events from the edge
@@ -59,7 +61,9 @@ bool glowIsArmed();
 // an eligible screen; paces itself internally (GLOW_ANIM_MS). `force` repaints
 // the band immediately (after the base screen repainted over it). Returns true
 // when pixels were pushed.
+#ifndef BOARD_IS_MONO
 bool glowTick(lgfx::LovyanGFX& gfx, uint8_t slot, bool force);
+#endif
 
 // One-shot: true once after the animation stopped, so the display loop clears
 // the band and forces a clean base-screen repaint.
