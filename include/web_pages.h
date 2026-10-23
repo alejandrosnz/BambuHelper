@@ -190,8 +190,9 @@ static const char PAGE_HTML_1[] PROGMEM = R"rawliteral(
   <h4>Support</h4>
   <button class="nav-item" type="button" data-section="diag"><span>Diagnostics</span></button>
   <div class="sidebar-footer">
-    <div>BambuHelper</div>
+    <div>BambuHelper-OLED</div>
     <div style="margin-top:2px">%BOARD% &middot; %FW_VER%</div>
+    <div style="margin-top:6px"><a href="https://github.com/%REPO_SLUG%" target="_blank" rel="noopener">GitHub &#8599;</a></div>
   </div>
 </aside>
 
