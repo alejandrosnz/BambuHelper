@@ -182,10 +182,13 @@ Current idle layout (date visible, weather on):
 
 ```
 date    row 0        size 2 (falls back to 1 for formats 4/5)
-clock   y = 14        size 3, 21 px  -> 14..34
-weather icon y = 34   30x30          -> 34..63 (last row of the panel)
-weather temp y = 42   size 2
+clock   y = 18       size 3, 18 px of ink  -> 18..35
+weather icon y = 36  30x30 cell (ink inside 64; bottom 2 rows are blank)
+weather temp y = 44  size 2
 ```
+
+With the date visible but the weather off, the date+clock pair is centered as
+one block and then lifted 10 px (`dateY = 4`, clock `y = 22` for a size-2 date).
 
 With the date hidden the original anchors are frozen: clock `y=5` (weather on) or
 `y=20` (weather off), icon `y=32`, temp `y=40`. Do not move them.

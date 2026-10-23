@@ -813,7 +813,7 @@ R"rawliteral(
   </div>
 
   <div class="card">
-    <div class="card-head"><div><h3>Clock</h3><p>Timezone, time format, and the small date line above the clock.</p></div></div>
+    <div class="card-head"><div><h3>Clock</h3><p>Timezone, time format, and the date line above the clock.</p></div></div>
       <div class="field">
         <label for="tz">Timezone (DST switches automatically)</label>
         <select id="tz"></select>
@@ -831,8 +831,10 @@ R"rawliteral(
           <option value="3" %DATEFMT3%>YYYY-MM-DD (2025-12-31)</option>
           <option value="4" %DATEFMT4%>DD MMM YYYY (31 Dec 2025)</option>
           <option value="5" %DATEFMT5%>MMM DD, YYYY (Dec 31, 2025)</option>
+          <option value="6" %DATEFMT6%>DD MMM (31 Dec)</option>
+          <option value="7" %DATEFMT7%>MMM DDth (Dec 31st)</option>
         </select>
-        <div class="hint">Drawn in small text at the top of the clock screen. The SH1106 has no colour or size choice.</div>
+        <div class="hint">Drawn at the top of the clock screen in the same font and size as the weather temperature; the two long month formats drop to half size to fit, the year-less ones stay full size. The SH1106 has no colour choice.</div>
       </div>
       <label class="check-row">
         <input type="checkbox" id="clk_hidedate" value="1" %CLK_HIDEDATE% onchange="toggleSetting('clkhd',this.checked)">

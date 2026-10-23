@@ -245,7 +245,7 @@ static void readDisplayFromForm() {
   netSettings.use24h = server.hasArg("use24h");
   if (server.hasArg("datefmt")) {
     int df = server.arg("datefmt").toInt();
-    if (df >= 0 && df <= 5) netSettings.dateFormat = (uint8_t)df;
+    if (df >= 0 && df <= 7) netSettings.dateFormat = (uint8_t)df;
   }
 }
 
@@ -2255,7 +2255,10 @@ static void handleSettingsImportFinish() {
       }
     }
     if (net["use24h"].is<bool>())             netSettings.use24h = net["use24h"].as<bool>();
-    if (net["dateFormat"].is<uint8_t>())     netSettings.dateFormat = net["dateFormat"].as<uint8_t>();
+    if (net["dateFormat"].is<uint8_t>()) {
+      uint8_t df = net["dateFormat"].as<uint8_t>();
+      netSettings.dateFormat = df <= 7 ? df : 0;
+    }
     if (net["mdnsEnabled"].is<bool>())        netSettings.mdnsEnabled = net["mdnsEnabled"].as<bool>();
     if (net["hostname"].is<const char*>())    sanitizeHostname(net["hostname"], netSettings.hostname, sizeof(netSettings.hostname));
   }

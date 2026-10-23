@@ -48,21 +48,30 @@ ROOT = Path(__file__).resolve().parent.parent
 # --- LAYOUT: mirrors renderIdle() -------------------------------------------
 W, H = 128, 64
 CLOCK_SIZE = 3
-CLOCK_GLYPH_H = 7 * CLOCK_SIZE   # 21 px of real glyph at size 3
+CLOCK_INK_H = 6 * CLOCK_SIZE     # 18 px of ink at size 3 (glyph row 6 is blank)
+CLK_GAP = 4                      # date -> clock gap without a weather row
+CLK_PAIR_LIFT = 10               # date+clock block sits 10 px above center
 WX_ICON_W = WX_ICON_H = 30       # mono_weather.h
-WX_ICON_TOP = 34                 # 30 px icon on the last 30 rows (34..63)
+WX_ICON_TOP = 36                 # cell rows 36..65; the last 2 rows are blank
 WX_ICON_X = 23
 WX_TEMP_X = 60
 WX_TEMP_SIZE = 2
 WX_TEMP_DY = 8                   # temp baseline offset below the icon
 DATE_MAX_SIZE = 2                # same scale as the weather temperature
-DATE_ROW = 0
+DATE_TOP = 0
 # Anchors kept for the date-hidden screen (regression guard).
 CLK_Y_WX_OLD, CLK_Y_OLD = 5, 20
 WX_TOP_OLD, WX_TEMP_Y_OLD = 32, 40
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def ordinal_suffix(day: int) -> str:
+    """English ordinal for format 7: 1st, 2nd, 3rd, 11th..13th, 21st..."""
+    if 11 <= day % 100 <= 13:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
 
 ICON_BY_CODE = {
     "01d": "wi_day_clear", "01n": "wi_night_clear",
@@ -160,6 +169,8 @@ def format_date(fmt: int, d: Date) -> str:
         f"{year:04d}-{mon:02d}-{day:02d}",
         f"{day:02d} {MONTHS[mon - 1]} {year:04d}",
         f"{MONTHS[mon - 1]} {day:02d}, {year:04d}",
+        f"{day:02d} {MONTHS[mon - 1]}",
+        f"{MONTHS[mon - 1]} {day}{ordinal_suffix(day)}",
     )[fmt]
 
 
@@ -177,6 +188,7 @@ class Scene:
     date: str | None
     dsize: int
     date_h: int
+    date_y: int
     clk_y: int
     wx: bool
     wx_top: int
@@ -186,23 +198,28 @@ class Scene:
 def build_scene(label: str, date_fmt: int, hide_date: bool, wx: bool,
                 day: Date) -> Scene:
     if hide_date:
-        return Scene(label, None, 0, 0,
+        return Scene(label, None, 0, 0, 0,
                      CLK_Y_WX_OLD if wx else CLK_Y_OLD, wx,
                      WX_TOP_OLD, WX_TEMP_Y_OLD)
     text = format_date(date_fmt, day)
     dsize = date_scale(text)
     date_h = 7 * dsize
-    gap = (WX_ICON_TOP if wx else H) - date_h - CLOCK_GLYPH_H
-    clk_y = date_h + (gap // 2 if gap > 0 else 0)
-    return Scene(label, text, dsize, date_h, clk_y, wx,
-                 WX_ICON_TOP, WX_ICON_TOP + WX_TEMP_DY)
+    if wx:
+        date_y = DATE_TOP
+        clk_y = date_h + (WX_ICON_TOP - date_h - CLOCK_INK_H) // 2 + 2
+        return Scene(label, text, dsize, date_h, date_y, clk_y, True,
+                     WX_ICON_TOP, WX_ICON_TOP + WX_TEMP_DY)
+    # Date + clock only: the pair is centered as one block, then lifted.
+    date_y = (H - (date_h + CLK_GAP + CLOCK_INK_H)) // 2 - CLK_PAIR_LIFT
+    return Scene(label, text, dsize, date_h, date_y,
+                 date_y + date_h + CLK_GAP, False, WX_TOP_OLD, WX_TEMP_Y_OLD)
 
 
 # --- Rendering ---------------------------------------------------------------
 def draw_scene(o: OLED, sc: Scene, time_s: str, twelve: bool, ampm: str,
                temp: str, icon: bytes, degree: bytes) -> None:
     if sc.date:
-        o.text(sc.date, (W - text_width(sc.date, sc.dsize)) // 2, DATE_ROW,
+        o.text(sc.date, (W - text_width(sc.date, sc.dsize)) // 2, sc.date_y,
                sc.dsize)
     if twelve:
         # Centered time + AM/PM block, exactly as renderIdle does it.
@@ -264,18 +281,33 @@ def write_png(path: Path, canvases: list[OLED], scale: int, gap: int) -> None:
 
 
 # --- Checks ------------------------------------------------------------------
-def check_scene(sc: Scene) -> list[str]:
+def ink_rows(data: bytes, w: int, h: int) -> tuple[int, int]:
+    """First/last rows that contain a lit pixel (bitmaps carry blank padding)."""
+    stride = (w + 7) // 8
+    rows = [j for j in range(h)
+            if any(data[j * stride + i // 8] & (0x80 >> (i % 8))
+                   for i in range(w))]
+    return (min(rows), max(rows)) if rows else (h, -1)
+
+
+def check_scene(sc: Scene, icon: bytes) -> list[str]:
     errs = []
-    if sc.date and text_width(sc.date, sc.dsize) > W:
-        errs.append(f"date {sc.date!r} is {text_width(sc.date, sc.dsize)} px wide")
-    if sc.clk_y < 0 or sc.clk_y + CLOCK_GLYPH_H > H:
-        errs.append(f"clock rows {sc.clk_y}..{sc.clk_y + CLOCK_GLYPH_H - 1} "
+    if sc.date:
+        if text_width(sc.date, sc.dsize) > W:
+            errs.append(f"date {sc.date!r} is {text_width(sc.date, sc.dsize)} px wide")
+        if sc.date_y < 0 or sc.date_y + sc.date_h > H:
+            errs.append(f"date ink rows {sc.date_y}..{sc.date_y + sc.date_h - 1} "
+                        "leave the panel")
+    if sc.clk_y < 0 or sc.clk_y + CLOCK_INK_H > H:
+        errs.append(f"clock ink rows {sc.clk_y}..{sc.clk_y + CLOCK_INK_H - 1} "
                     "leave the panel")
-    if sc.date and sc.clk_y < sc.date_h:
+    if sc.date and sc.clk_y < sc.date_y + sc.date_h:
         errs.append("clock overlaps the date")
-    if sc.wx and sc.wx_top + WX_ICON_H > H:
-        errs.append(f"weather icon rows {sc.wx_top}.."
-                    f"{sc.wx_top + WX_ICON_H - 1} leave the panel")
+    if sc.wx:
+        lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
+        if sc.wx_top + lo < 0 or sc.wx_top + hi > H - 1:
+            errs.append(f"weather ink rows {sc.wx_top + lo}.."
+                        f"{sc.wx_top + hi} leave the panel")
     return errs
 
 
@@ -284,7 +316,9 @@ def firmware_drift_warnings() -> list[str]:
     src = (ROOT / "src" / "mono_display.cpp").read_text(
         encoding="utf-8", errors="ignore")
     pairs = [
-        (r"const int clkH\s*=\s*(\d+)", CLOCK_GLYPH_H, "clkH"),
+        (r"const int clkInkH\s*=\s*(\d+)", CLOCK_INK_H, "clkInkH"),
+        (r"const int clkGap\s*=\s*(\d+)", CLK_GAP, "clkGap"),
+        (r"const int clkPairLift\s*=\s*(\d+)", CLK_PAIR_LIFT, "clkPairLift"),
         (r"const int wxTop\s*=\s*(\d+)", WX_ICON_TOP, "wxTop"),
         (r"clkY = wxShown \? (\d+) : (\d+);", (CLK_Y_WX_OLD, CLK_Y_OLD),
          "date-hidden clock anchors"),
@@ -309,9 +343,10 @@ def firmware_drift_warnings() -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Render the SH1106 idle screen to a PNG (no Pillow).")
-    ap.add_argument("--date-format", type=int, choices=range(6), default=0,
+    ap.add_argument("--date-format", type=int, choices=range(8), default=0,
                     help="0=DD.MM.YYYY 1=DD-MM-YYYY 2=MM/DD/YYYY 3=YYYY-MM-DD "
-                         "4=DD MMM YYYY 5=MMM DD, YYYY (default 0)")
+                         "4=DD MMM YYYY 5=MMM DD, YYYY 6=DD MMM 7=MMM DDth "
+                         "(default 0)")
     ap.add_argument("--date", type=Date.fromisoformat, default=Date(2025, 12, 31),
                     metavar="YYYY-MM-DD", help="date to render (default 2025-12-31)")
     ap.add_argument("--hide-date", action="store_true",
@@ -340,7 +375,7 @@ def main() -> int:
 
     scenes: list[Scene] = []
     if args.all_formats:
-        for fmt in range(6):
+        for fmt in range(8):
             scenes.append(build_scene(f"format {fmt}", fmt, False,
                                       not args.no_weather, args.date))
     else:
@@ -357,18 +392,22 @@ def main() -> int:
 
     canvases = []
     failed = False
-    print(f"{'scene':<26} {'date':<13} {'sz':>2} {'clk_y':>5} "
-          f"{'wx rows':>9}  result")
+    print(f"{'scene':<26} {'date':<13} {'sz':>2} {'d_y':>3} {'clk_y':>5} "
+          f"{'wx ink':>8}  result")
     for sc in scenes:
         o = OLED(font)
         draw_scene(o, sc, args.time, args.twelve, args.ampm, args.temp,
                    icon, degree)
         canvases.append(o)
-        errs = check_scene(sc)
+        errs = check_scene(sc, icon)
         failed |= bool(errs)
-        wx_rows = f"{sc.wx_top}..{sc.wx_top + WX_ICON_H - 1}" if sc.wx else "-"
+        if sc.wx:
+            lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
+            wx_rows = f"{sc.wx_top + lo}..{sc.wx_top + hi}"
+        else:
+            wx_rows = "-"
         print(f"{sc.label:<26} {sc.date or '(hidden)':<13} {sc.dsize:>2} "
-              f"{sc.clk_y:>5} {wx_rows:>9}  "
+              f"{sc.date_y:>3} {sc.clk_y:>5} {wx_rows:>8}  "
               f"{'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")
 
     warns = firmware_drift_warnings()

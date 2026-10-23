@@ -128,7 +128,7 @@ static bool resolvePlaceholder(const char* name, String& out) {
 
   // --- Clock ---
   if (strcmp(name, "USE24H") == 0)     { out = netSettings.use24h ? "checked" : ""; return true; }
-  if (strncmp(name, "DATEFMT", 7) == 0 && name[7] >= '0' && name[7] <= '5' && name[8] == '\0') {
+  if (strncmp(name, "DATEFMT", 7) == 0 && name[7] >= '0' && name[7] <= '7' && name[8] == '\0') {
     out = netSettings.dateFormat == (name[7] - '0') ? "selected" : "";
     return true;
   }

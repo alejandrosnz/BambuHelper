@@ -767,6 +767,7 @@ void loadSettings() {
 
   netSettings.use24h = prefs.getBool("net_24h", true);
   netSettings.dateFormat = prefs.getUChar("net_datefmt", 0);
+  if (netSettings.dateFormat > 7) netSettings.dateFormat = 0;
 
   // Display power settings
   dpSettings.finishDisplayMins = prefs.getUShort("dp_fmins", 3);
