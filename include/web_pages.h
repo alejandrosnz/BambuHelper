@@ -638,6 +638,11 @@ R"rawliteral(
       <div class="hint">Free key: sign up at <a href="https://openweathermap.org/appid" target="_blank" style="color:var(--accent)">openweathermap.org</a> and copy it from <em>API keys</em>. Use City,CC with no spaces. Weather only shows while the big clock is on; key and location save when you leave the field.</div>
     </div>
     <label class="check-row">
+      <input type="checkbox" id="mno_wf" value="1" %MONO_WF% onchange="toggleSetting('mno_wf',this.checked,'Weather unit')">
+      <label for="mno_wf">Show the weather temperature in &deg;F</label>
+    </label>
+    <div class="hint" style="padding-left:28px">Off = Celsius (default). Only the weather reading changes; the printer temperatures stay in &deg;C.</div>
+    <label class="check-row">
       <input type="checkbox" id="mno_hot" value="1" %MONO_HOT% onchange="toggleSetting('mno_hot',this.checked,'HOT warning')">
       <label for="mno_hot">Show HOT warning</label>
     </label>

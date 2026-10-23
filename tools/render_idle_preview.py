@@ -34,7 +34,8 @@ Default sheet (clock on, unless the label says otherwise):
     7. weather missing ("--")   8. no NTP ("--:--", no date)
     9. 12h + AM/PM
 --hide-date keeps only the two date-hidden states; --no-weather drops every
-weather row; --all-formats draws one panel per date format.
+weather row; --all-formats draws one panel per date format; --unit F redraws
+the weather block with the °F unit letter and adds the 3-digit worst case.
 """
 
 from __future__ import annotations
@@ -58,6 +59,7 @@ WX_ICON_W = WX_ICON_H = 30       # mono_weather.h
 WX_ICON_TOP = 36                 # cell rows 36..65; the last 2 rows are blank
 WX_ICON_X = 23
 WX_TEMP_X = 60
+WX_TEMP_X_3D = 56                # 3-digit reading: shifts left of the corner icon
 WX_TEMP_SIZE = 2
 WX_TEMP_DY = 8                   # temp baseline offset below the icon
 DATE_MAX_SIZE = 2                # same scale as the weather temperature
@@ -162,16 +164,18 @@ class Scene:
     twelve: bool = False        # use24h == false: centered time + AM/PM
     nozzle: int = 24            # big-temp screen (clock off)
     bed: int = 24
+    temp_text: str | None = None  # per-panel weather temp override
 
 
 def build_scene(label: str, date_fmt: int, hide_date: bool, wx: bool,
                 day: Date, ntp: bool = True, status: str = "off",
                 clock_on: bool = True, hot: bool = False,
                 weather_ok: bool = True, twelve: bool = False,
-                nozzle: int = 24, bed: int = 24) -> Scene:
+                nozzle: int = 24, bed: int = 24,
+                temp_text: str | None = None) -> Scene:
     extra = dict(clock_on=clock_on, status=status, hot=hot,
                  weather_ok=weather_ok, ntp=ntp, twelve=twelve,
-                 nozzle=nozzle, bed=bed)
+                 nozzle=nozzle, bed=bed, temp_text=temp_text)
     if not clock_on:
         return Scene(label, None, 0, 0, 0, 0, False,
                      WX_TOP_OLD, WX_TEMP_Y_OLD, **extra)
@@ -212,7 +216,7 @@ def draw_status(c: Canvas, kind: str) -> None:
 
 def draw_scene(c: Canvas, sc: Scene, gfx, time_s: str, ampm: str, temp: str,
                icon: bytes, degree: bytes,
-               temp_icons: dict[str, bytes]) -> None:
+               temp_icons: dict[str, bytes], unit: str = "C") -> None:
     c.clear()
     if sc.clock_on:
         c.setFont()
@@ -243,18 +247,19 @@ def draw_scene(c: Canvas, sc: Scene, gfx, time_s: str, ampm: str, temp: str,
             c.setCursor(20, sc.clk_y)
             c.print("--:--")
         if sc.wx:
-            txt = temp if sc.weather_ok else "--"
+            txt = (sc.temp_text or temp) if sc.weather_ok else "--"
             n = len(txt)
             c.drawBitmap(WX_ICON_X, sc.wx_top,
                          icon if sc.weather_ok else temp_icons["error"],
                          WX_ICON_W, WX_ICON_H)
             c.setTextSize(WX_TEMP_SIZE)
-            c.setCursor(WX_TEMP_X, sc.wx_temp_y)
+            tx = WX_TEMP_X_3D if n >= 3 else WX_TEMP_X
+            c.setCursor(tx, sc.wx_temp_y)
             c.print(txt)
-            deg_x = WX_TEMP_X + 2 + n * 12
+            deg_x = tx + 2 + n * 12
             c.drawBitmap(deg_x, sc.wx_temp_y, degree, 8, 10)
             c.setCursor(deg_x + 9, sc.wx_temp_y)
-            c.print("C")
+            c.print(unit)
         c.setFont()
         c.setTextSize(1)
     else:
@@ -293,7 +298,8 @@ def ink_rows(data: bytes, w: int, h: int) -> tuple[int, int]:
     return (min(rows), max(rows)) if rows else (h, -1)
 
 
-def check_scene(sc: Scene, icon: bytes) -> list[str]:
+def check_scene(sc: Scene, icon: bytes, temp: str = "",
+                unit: str = "C") -> list[str]:
     errs = []
     if sc.date:
         if text_width(sc.date, sc.dsize) > W:
@@ -312,6 +318,13 @@ def check_scene(sc: Scene, icon: bytes) -> list[str]:
             if sc.wx_top + lo < 0 or sc.wx_top + hi > H - 1:
                 errs.append(f"weather ink rows {sc.wx_top + lo}.."
                             f"{sc.wx_top + hi} leave the panel")
+            if sc.status != "off":
+                txt = (sc.temp_text or temp) if sc.weather_ok else "--"
+                tx = WX_TEMP_X_3D if len(txt) >= 3 else WX_TEMP_X
+                end = tx + 11 + len(txt) * 12 + 10  # unit glyph ink, exclusive
+                if end > STATUS_X:
+                    errs.append(f"weather unit ink ends at x={end}, under the "
+                                "corner status icon")
     else:
         if TEMP_ROW_Y + TEMP_ICON_H > H:
             errs.append("temp icons leave the panel")
@@ -335,6 +348,8 @@ def firmware_drift_warnings() -> list[str]:
         (r"wxIconY = dateShown \? wxTop : (\d+);", WX_TOP_OLD, "old icon top"),
         (r"wxTempY = dateShown \? wxTop \+ (\d+) : (\d+);",
          (WX_TEMP_DY, WX_TEMP_Y_OLD), "weather temp offsets"),
+        (r"int tx = \(n >= 3\) \? (\d+) : (\d+);",
+         (WX_TEMP_X_3D, WX_TEMP_X), "weather temp x"),
         (r"const int iconX = (\d+);", STATUS_X, "idle status icon x"),
         (r"const int iconY = (\d+);", STATUS_Y, "idle status icon y"),
         (r"drawNozzleIcon\(x, 32\);\s*\n\s*x \+= (\d+);", 11,
@@ -356,7 +371,7 @@ def firmware_drift_warnings() -> list[str]:
 
 # --- Scenes ------------------------------------------------------------------
 def default_scenes(date_fmt: int, day: Date, status: str,
-                   twelve: bool) -> list[Scene]:
+                   twelve: bool, unit: str = "C") -> list[Scene]:
     """The tour drawn by a plain run: every idle branch and OLED toggle."""
     wx_on = build_scene("date + clock + weather", date_fmt, False, True, day,
                         status=status, twelve=twelve)
@@ -377,6 +392,12 @@ def default_scenes(date_fmt: int, day: Date, status: str,
                          ntp=False, status=status)
     scenes = [wx_on, date_only, clock_wx, clock_only, cold, hot, no_wx,
               no_ntp]
+    if unit == "F":
+        # Worst case for the right edge: a 3-digit °F reading next to the
+        # corner status icon (the block shifts 4 px left for it).
+        scenes.append(build_scene("weather 3-digit (\u00b0F)", date_fmt, False,
+                                  True, day, status="ok", twelve=twelve,
+                                  temp_text="100"))
     if not twelve:
         # With --12h every clock panel already shows the AM/PM block.
         scenes.append(build_scene("12h + AM/PM", date_fmt, False, True, day,
@@ -404,7 +425,10 @@ def main() -> int:
     ap.add_argument("--12h", dest="twelve", action="store_true",
                     help="12-hour layout + AM/PM")
     ap.add_argument("--ampm", choices=("AM", "PM"), default="PM")
-    ap.add_argument("--temp", default="21", help="weather temp text (default 21)")
+    ap.add_argument("--temp", default=None,
+                    help="weather temp text (default 21 in °C, 70 in °F)")
+    ap.add_argument("--unit", choices=("C", "F"), default="C",
+                    help="weather unit letter (default C)")
     ap.add_argument("--icon", default="01d",
                     help="OpenWeatherMap icon code, e.g. 01d, 10n (default 01d)")
     ap.add_argument("--status", choices=("off", "ok", "offline", "wifi"),
@@ -418,6 +442,8 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=ROOT / "preview" / "idle.png",
                     help="output PNG (default preview/idle.png)")
     args = ap.parse_args()
+    if args.temp is None:
+        args.temp = "70" if args.unit == "F" else "21"
 
     font = load_font()
     gfx = load_gfx_font()
@@ -450,7 +476,7 @@ def main() -> int:
                                           twelve=args.twelve))
     else:
         scenes = default_scenes(args.date_format, args.date, args.status,
-                                args.twelve)
+                                args.twelve, args.unit)
 
     panels: list[tuple[str, Canvas]] = []
     failed = False
@@ -460,8 +486,8 @@ def main() -> int:
     for i, sc in enumerate(scenes):
         c = Canvas(font, gfx)
         draw_scene(c, sc, gfx, args.time, args.ampm, args.temp, icon, degree,
-                   temp_icons)
-        errs = check_scene(sc, icon)
+                   temp_icons, args.unit)
+        errs = check_scene(sc, icon, args.temp, args.unit)
         failed |= bool(errs)
         if sc.wx:
             lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
@@ -490,7 +516,8 @@ def main() -> int:
     print(f"\nwrote {args.out}  ({len(panels)} panels, {args.scale}x, "
           f"{max(1, cols)} column(s), {args.time}"
           f"{' ' + args.ampm if any(s.twelve for s in scenes) else ''}"
-          f"{', weather ' + args.icon if any(s.wx for s in scenes) else ''})")
+          f"{', weather ' + args.icon if any(s.wx for s in scenes) else ''}"
+          f"{', ' + args.unit if any(s.wx for s in scenes) else ''})")
     return 1 if failed else 0
 
 

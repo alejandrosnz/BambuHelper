@@ -194,6 +194,7 @@ static void readDisplayFromForm() {
   if (server.hasArg("mno_wq"))
     sanitizeGaugeLabel(server.arg("mno_wq").c_str(), monoSettings.weatherQuery,
                        sizeof(monoSettings.weatherQuery));
+  monoSettings.weatherFahrenheit = server.hasArg("mno_wf");
   if (server.hasArg("mno_cont"))
     monoSettings.oledContrast =
         (uint8_t)constrain(server.arg("mno_cont").toInt(), MONO_OLED_CONTRAST_MIN, 255);
@@ -810,6 +811,7 @@ static void handleToggleSetting() {
   else if (key == "mno_hot") monoSettings.showHotIdle = on;
   else if (key == "mno_splash") monoSettings.showSplash = on;
   else if (key == "mno_wen") monoSettings.weatherEnabled = on;
+  else if (key == "mno_wf")  monoSettings.weatherFahrenheit = on;
   else if (key == "mno_fmins") {
     dpSettings.finishDisplayMins =
         (uint16_t)constrain(server.arg("val").toInt(), 0, 999);
@@ -1731,6 +1733,7 @@ static void handleSettingsExport() {
   // the only manual step).
   mono["weatherEnabled"] = monoSettings.weatherEnabled;
   mono["weatherQuery"] = monoSettings.weatherQuery;
+  mono["weatherFahrenheit"] = monoSettings.weatherFahrenheit;
   mono["contrast"] = monoSettings.oledContrast;
   disp["nozzleScaleMax"]  = dispSettings.nozzleScaleMax;
   disp["bedScaleMax"]     = dispSettings.bedScaleMax;
@@ -2170,6 +2173,7 @@ static void handleSettingsImportFinish() {
       if (mono["weatherQuery"].is<const char*>())
         sanitizeGaugeLabel(mono["weatherQuery"].as<const char*>(), monoSettings.weatherQuery,
                            sizeof(monoSettings.weatherQuery));
+      if (mono["weatherFahrenheit"].is<bool>()) monoSettings.weatherFahrenheit = mono["weatherFahrenheit"].as<bool>();
       if (mono["contrast"].is<uint8_t>() || mono["contrast"].is<unsigned int>() || mono["contrast"].is<int>())
         monoSettings.oledContrast = (uint8_t)constrain(mono["contrast"].as<int>(), MONO_OLED_CONTRAST_MIN, 255);
     }

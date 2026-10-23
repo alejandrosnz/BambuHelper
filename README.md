@@ -170,6 +170,7 @@ The **OLED** section is split into four cards: **While printing**, **Idle screen
 | Idle screen | Show weather icon + temperature | Off | OpenWeatherMap on the idle clock |
 | Idle screen | Weather API key | *(empty)* | Free OpenWeatherMap key |
 | Idle screen | Location | `Madrid,ES` | `City,CC`, no spaces |
+| Idle screen | Weather in °F | Off | Shows the weather temperature in Fahrenheit; printer temps stay in °C |
 | Idle screen | Show HOT warning | Off | Warns when the nozzle is above 50 °C while idle; only on the big-temps screen (big clock off) |
 | Done screen | Show cooldown temperatures | Off | Nozzle/bed cooldown row on the Done screen |
 | Done screen | Show the Done screen for | 3 minutes | Minutes before returning to idle; `0` = until the next print |
@@ -190,6 +191,7 @@ TFT-only sections (Display, After print, Colors, Hardware, Power) are hidden aut
 - Free OpenWeatherMap key: <https://openweathermap.org/appid>
 - Enable **Show weather icon + temperature**, paste the key, and set the location as `City,CC` (for example `Madrid,ES`). The key and location save when you leave the field.
 - The device polls only while the idle clock is visible, every 15 minutes. The fetch runs in a background task, so it never blocks MQTT or the web server.
+- **Weather in °F** switches only the weather reading to Fahrenheit; the printer temperatures keep their `°C` readout.
 - The API key is stored locally and deliberately **not** included in JSON settings backups.
 
 ## Limitations

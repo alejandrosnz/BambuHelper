@@ -191,6 +191,10 @@ weather icon y = 36  30x30 cell (ink inside 64; bottom 2 rows are blank)
 weather temp y = 44  size 2
 ```
 
+The weather temperature uses the unit letter from **Weather in °F** (default
+`C`). A 3-digit reading (`100` in °F) would run the unit letter into the corner
+status icon, so the temp block starts at `x = 56` instead of `60`.
+
 With the date visible but the weather off, the date sits near the top edge
 (`dateY = 7`) with a 10 px ink gap to the clock (`y = 29` for a size-2 date,
 `y = 23` for the size-1 fallback).
@@ -217,6 +221,7 @@ python tools/render_idle_preview.py --hide-date      # time-only anchors
 python tools/render_idle_preview.py --status wifi    # corner icon: off|ok|offline|wifi
 python tools/render_idle_preview.py --no-weather --12h --ampm AM
 python tools/render_idle_preview.py --icon 10n --temp -3 --time 09:05
+python tools/render_idle_preview.py --unit F            # °F unit + 3-digit case
 python tools/render_idle_preview.py --scale 8 --cols 2 --out /tmp/idle.png
 ```
 

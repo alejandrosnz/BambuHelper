@@ -393,6 +393,7 @@ struct MonoDisplaySettings {
   bool weatherEnabled;    // OpenWeatherMap on the idle clock (needs key + location)
   char weatherKey[65];    // OpenWeatherMap API key (32 hex chars)
   char weatherQuery[64];  // location query, e.g. "Madrid,ES" (no spaces)
+  bool weatherFahrenheit; // show the weather temperature in °F (API stays metric)
   uint8_t oledContrast;   // SH1106 contrast 0-255 (255 = max, the driver default)
 };
 

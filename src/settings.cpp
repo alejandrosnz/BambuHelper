@@ -31,6 +31,7 @@ MonoDisplaySettings monoSettings = {
   /*weatherEnabled*/    false,
   /*weatherKey*/        "",
   /*weatherQuery*/      "Madrid,ES",
+  /*weatherFahrenheit*/ false,
   /*oledContrast*/      255,
 };
 GaugeLabels gaugeLabels;
@@ -627,6 +628,7 @@ void loadSettings() {
   // strict UTF-8, trimmed - keeps the "stored sanitized, emit raw" invariant.
   sanitizeGaugeLabel(monoSettings.weatherQuery, monoSettings.weatherQuery,
                      sizeof(monoSettings.weatherQuery));
+  monoSettings.weatherFahrenheit = prefs.getBool("mno_wf", false);
   monoSettings.oledContrast =
       (uint8_t)constrain(prefs.getUChar("mno_cont", 255), MONO_OLED_CONTRAST_MIN, 255);
   {
@@ -995,6 +997,7 @@ void saveSettings() {
   prefs.putBool("mno_wen", monoSettings.weatherEnabled);
   prefs.putString("mno_wkey", monoSettings.weatherKey);
   prefs.putString("mno_wq", monoSettings.weatherQuery);
+  prefs.putBool("mno_wf", monoSettings.weatherFahrenheit);
   prefs.putUChar("mno_cont", monoSettings.oledContrast);
   prefs.putUShort("dsp_nozmx", dispSettings.nozzleScaleMax);
   prefs.putUShort("dsp_bedmx", dispSettings.bedScaleMax);

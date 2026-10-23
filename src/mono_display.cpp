@@ -787,20 +787,28 @@ static void renderIdle(const BambuState &st) {
     if (wxShown) {
       MonoWeatherData w;
       bool have = monoWeatherGet(w);
+      // °F is display-only: the API always returns metric, so a unit flip is
+      // just a repaint (monoFlags) and never needs another fetch.
       char tmp[8];
       if (have)
-        snprintf(tmp, sizeof(tmp), "%d", tempInt(w.tempC));
+        snprintf(tmp, sizeof(tmp), "%d", tempInt(monoSettings.weatherFahrenheit
+                                                     ? w.tempC * 9.0f / 5.0f + 32.0f
+                                                     : w.tempC));
       else
         snprintf(tmp, sizeof(tmp), "--");
       size_t n = strlen(tmp);
+      // A 3-digit reading ("100" in °F) runs the unit letter into the corner
+      // status icon at x=116, so the whole block shifts 4 px left.
+      int tx = (n >= 3) ? 56 : 60;
       oled.drawBitmap(23, wxIconY, monoWeatherIcon(have ? w.icon : ""),
                       MONO_WX_ICON_W, MONO_WX_ICON_H, SH110X_WHITE);
       oled.setTextSize(2);
-      oled.setCursor(60, wxTempY);
+      oled.setCursor(tx, wxTempY);
       oled.print(tmp);
-      oled.drawBitmap(60 + 2 + n * 12, wxTempY, monoDegreeBmp(), 8, 10, SH110X_WHITE);
-      oled.setCursor(60 + 2 + 9 + n * 12, wxTempY);
-      oled.print("C");
+      oled.drawBitmap(tx + 2 + n * 12, wxTempY, monoDegreeBmp(), 8, 10,
+                      SH110X_WHITE);
+      oled.setCursor(tx + 2 + 9 + n * 12, wxTempY);
+      oled.print(monoSettings.weatherFahrenheit ? "F" : "C");
     }
     oled.setFont();
     oled.setTextSize(1);
@@ -956,6 +964,7 @@ static uint16_t monoFlagsNow() {
   if (monoSettings.showHotIdle) f |= 0x40;
   if (monoSettings.showClockIdle) f |= 0x80;
   if (monoSettings.weatherEnabled) f |= 0x100;
+  if (monoSettings.weatherFahrenheit) f |= 0x800;  // unit flip repaints the idle temp
   if (!netSettings.use24h) f |= 0x200;  // 12h clock/end-time: repaint now
   if (!monoSettings.showStatusIdle) f |= 0x400;
   return f;
