@@ -713,14 +713,15 @@ static void renderIdle(const BambuState &st) {
     bool wxShown = monoSettings.weatherEnabled || monoMockActive();
     bool dateShown = ntpOk() && !dispSettings.hideClockDate;
     const int clkInkH = 18;      // 6 visible glyph rows at size 3 (row 6 is blank)
-    const int clkGap = 4;        // date -> clock gap when there is no weather row
-    const int clkPairLift = 10;  // date+clock block sits 10 px above center
+    const int clkPairTop = 7;    // date top edge on the date+clock screen
+    const int clkInkGap = 10;    // ink gap between the date and the clock
     // The weather bitmaps carry >= 2 blank rows at the bottom, so anchoring the
     // 30 px cell at 36 keeps every icon's ink inside the panel (rain/showers
     // reach row 63) and the row visually on the bottom edge.
     const int wxTop = 36;
-    int dateH = 0;   // date ink height
+    int dateH = 0;      // date ink height
     int dateY = 0;
+    uint8_t dsize = 0;  // date scale, 0 while the date is hidden
     oled.setFont();
     oled.setTextSize(1);
     if (dateShown) {
@@ -728,7 +729,7 @@ static void renderIdle(const BambuState &st) {
       fmtClockDate(date, sizeof(date));
       int16_t dx1, dy1;
       uint16_t dw, dh;
-      uint8_t dsize = 2;
+      dsize = 2;
       oled.setTextSize(dsize);
       oled.getTextBounds(date, 0, 0, &dx1, &dy1, &dw, &dh);
       if ((int)dw > OLED_WIDTH) {
@@ -737,11 +738,7 @@ static void renderIdle(const BambuState &st) {
         oled.getTextBounds(date, 0, 0, &dx1, &dy1, &dw, &dh);
       }
       dateH = 7 * dsize;  // glyph rows; the cell's trailing row is blank
-      if (!wxShown) {
-        // Date + clock only: center the pair as one block, then lift it 10 px
-        // (the panel looked too low with the bottom half empty).
-        dateY = (OLED_HEIGHT - (dateH + clkGap + clkInkH)) / 2 - clkPairLift;
-      }
+      if (!wxShown) dateY = clkPairTop;
       oled.setCursor((OLED_WIDTH - (int)dw) / 2, dateY);
       oled.print(date);
       oled.setTextSize(1);
@@ -755,7 +752,9 @@ static void renderIdle(const BambuState &st) {
       // below the clock stays balanced.
       clkY = dateH + (wxTop - dateH - clkInkH) / 2 + 2;
     } else {
-      clkY = dateY + dateH + clkGap;
+      // Date + clock only: date near the top edge and a roomy 10 px ink gap
+      // under it, so the clock does not sit right below the date.
+      clkY = dateY + 6 * dsize + clkInkGap;
     }
     int wxIconY = dateShown ? wxTop : 32;
     int wxTempY = dateShown ? wxTop + 8 : 40;

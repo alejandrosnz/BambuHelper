@@ -49,8 +49,8 @@ ROOT = Path(__file__).resolve().parent.parent
 W, H = 128, 64
 CLOCK_SIZE = 3
 CLOCK_INK_H = 6 * CLOCK_SIZE     # 18 px of ink at size 3 (glyph row 6 is blank)
-CLK_GAP = 4                      # date -> clock gap without a weather row
-CLK_PAIR_LIFT = 10               # date+clock block sits 10 px above center
+CLK_PAIR_TOP = 7                 # date top edge on the date+clock screen
+CLK_INK_GAP = 10                 # ink gap between the date and the clock
 WX_ICON_W = WX_ICON_H = 30       # mono_weather.h
 WX_ICON_TOP = 36                 # cell rows 36..65; the last 2 rows are blank
 WX_ICON_X = 23
@@ -209,10 +209,11 @@ def build_scene(label: str, date_fmt: int, hide_date: bool, wx: bool,
         clk_y = date_h + (WX_ICON_TOP - date_h - CLOCK_INK_H) // 2 + 2
         return Scene(label, text, dsize, date_h, date_y, clk_y, True,
                      WX_ICON_TOP, WX_ICON_TOP + WX_TEMP_DY)
-    # Date + clock only: the pair is centered as one block, then lifted.
-    date_y = (H - (date_h + CLK_GAP + CLOCK_INK_H)) // 2 - CLK_PAIR_LIFT
+    # Date + clock only: date near the top and a roomy ink gap under it.
+    date_y = CLK_PAIR_TOP
     return Scene(label, text, dsize, date_h, date_y,
-                 date_y + date_h + CLK_GAP, False, WX_TOP_OLD, WX_TEMP_Y_OLD)
+                 date_y + 6 * dsize + CLK_INK_GAP, False,
+                 WX_TOP_OLD, WX_TEMP_Y_OLD)
 
 
 # --- Rendering ---------------------------------------------------------------
@@ -317,8 +318,8 @@ def firmware_drift_warnings() -> list[str]:
         encoding="utf-8", errors="ignore")
     pairs = [
         (r"const int clkInkH\s*=\s*(\d+)", CLOCK_INK_H, "clkInkH"),
-        (r"const int clkGap\s*=\s*(\d+)", CLK_GAP, "clkGap"),
-        (r"const int clkPairLift\s*=\s*(\d+)", CLK_PAIR_LIFT, "clkPairLift"),
+        (r"const int clkPairTop\s*=\s*(\d+)", CLK_PAIR_TOP, "clkPairTop"),
+        (r"const int clkInkGap\s*=\s*(\d+)", CLK_INK_GAP, "clkInkGap"),
         (r"const int wxTop\s*=\s*(\d+)", WX_ICON_TOP, "wxTop"),
         (r"clkY = wxShown \? (\d+) : (\d+);", (CLK_Y_WX_OLD, CLK_Y_OLD),
          "date-hidden clock anchors"),

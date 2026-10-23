@@ -189,8 +189,9 @@ weather icon y = 36  30x30 cell (ink inside 64; bottom 2 rows are blank)
 weather temp y = 44  size 2
 ```
 
-With the date visible but the weather off, the date+clock pair is centered as
-one block and then lifted 10 px (`dateY = 4`, clock `y = 22` for a size-2 date).
+With the date visible but the weather off, the date sits near the top edge
+(`dateY = 7`) with a 10 px ink gap to the clock (`y = 29` for a size-2 date,
+`y = 23` for the size-1 fallback).
 
 With the date hidden the original anchors are frozen: clock `y=5` (weather on) or
 `y=20` (weather off), icon `y=32`, temp `y=40`. Do not move them.
