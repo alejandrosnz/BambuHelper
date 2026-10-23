@@ -98,6 +98,7 @@ This is the only way to see the real panel without a printer.
 | `tools/render_idle_preview.py` | Pixel preview of the idle screen |
 | `tools/render_status_preview.py` | Pixel preview of the printing/pause/done screens |
 | `tools/release.py` | OTA packaging + slot-size check |
+| `img/preview/` | Committed preview snapshots used by the README |
 | `include/config.h` | `FW_VERSION`, board/feature defaults |
 
 ## How a setting is wired (end to end)
@@ -227,7 +228,9 @@ python tools/render_idle_preview.py --scale 8 --cols 2 --out /tmp/idle.png
   is output pixels per OLED pixel (default 5).
 - The 1 px gray frame is drawn **outside** the 128x64 area: it marks the panel
   bounds without covering pixels.
-- `preview/` is git-ignored; never commit generated PNGs.
+- `preview/` is git-ignored scratch space; the committed README snapshots live in
+  `img/preview/` (regenerate them with `--out` / `--out-dir` when a layout is
+  approved).
 - The script mirrors `renderIdle()` constants. It warns when the firmware
   constants drift; if you move a block, update both.
 - It models the idle screen only; `tools/render_status_preview.py` does the

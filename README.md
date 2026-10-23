@@ -153,6 +153,28 @@ The portal only offers assets whose name starts with `BambuHelper-OLED-<board>-`
 - The job title wraps to two 11-character lines and shows `...` on overflow.
 - On the C3, HMS errors show **codes on the screen**; the full sentence is resolved in the web portal.
 
+### Layout previews
+
+Rendered straight from the firmware sources (real fonts and bitmaps, 1 px = 1 OLED
+pixel) by `tools/render_idle_preview.py` and `tools/render_status_preview.py`.
+Regenerate them when a layout change is approved and commit the new PNGs.
+
+Idle: date + clock + weather, the four clock layouts, the clock-off big-temps
+fallback, `HOT`, a missing weather fetch, NTP down and the 12 h AM/PM block.
+
+![Idle screen states](img/preview/idle.png)
+
+Printing: 0–100 %, wrapped and hard-cut titles, both pause blink frames, the
+`showLayer` / `showBar` / `showTimePrinting` / `showTimeAlt` toggles and the
+no-data and no-NTP cases.
+
+![Printing and pause states](img/preview/printing.png)
+
+Done: cooldown temps on/off, targets 0 vs set, 3-digit values and 1-line /
+2-line / overflow titles.
+
+![Done screen states](img/preview/done.png)
+
 ## Settings
 
 ### OLED cards
