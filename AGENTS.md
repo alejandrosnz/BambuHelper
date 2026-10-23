@@ -94,6 +94,7 @@ This is the only way to see the real panel without a printer.
 | `src/web_server.cpp` | Form/toggle handlers, JSON backup/restore, OTA, APIs |
 | `web/app.js` / `web/app.css` | Portal assets, gzipped at build time |
 | `tools/gen_web_assets.py` | Pre-build step: gzip assets into PROGMEM |
+| `tools/oled_preview.py` | Shared preview layer: fonts, GFX canvas, PNG sheets |
 | `tools/render_idle_preview.py` | Pixel preview of the idle screen |
 | `tools/render_status_preview.py` | Pixel preview of the printing/pause/done screens |
 | `tools/release.py` | OTA packaging + slot-size check |
@@ -198,22 +199,32 @@ With the date hidden the original anchors are frozen: clock `y=5` (weather on) o
 
 ## Previewing the layout
 
-`tools/render_idle_preview.py` replays the idle draw calls with the **real**
-`glcdfont.c` from `.pio/libdeps` and the **real** bitmaps from
-`include/mono_weather_icons.h`, then writes a PNG using only the standard
-library (no Pillow). It also prints the computed coordinates and exits non-zero
-if anything leaves the panel.
+Both preview tools share `tools/oled_preview.py`: the **real** `glcdfont.c` and
+`FreeMonoBold9pt7b` loaders from `.pio/libdeps`, an Adafruit_GFX subset
+(default + GFX fonts, bitmaps, lines, circles, `getTextBounds`), the XBM reader
+and the captioned PNG sheet writer (standard library only, no Pillow). They
+replay the firmware draw calls, print a per-panel table (coordinates, ink bbox,
+`OK`/`FAIL`) and exit non-zero if a pixel leaves the panel.
+
+`tools/render_idle_preview.py` covers the clock and the clock-off big-temps
+fallback:
 
 ```bash
-python tools/render_idle_preview.py                  # 4 states -> preview/idle.png
+python tools/render_idle_preview.py                  # full tour -> preview/idle.png
 python tools/render_idle_preview.py --all-formats    # one panel per date format
 python tools/render_idle_preview.py --hide-date      # time-only anchors
+python tools/render_idle_preview.py --status wifi    # corner icon: off|ok|offline|wifi
 python tools/render_idle_preview.py --no-weather --12h --ampm AM
 python tools/render_idle_preview.py --icon 10n --temp -3 --time 09:05
-python tools/render_idle_preview.py --scale 8 --out /tmp/idle.png
+python tools/render_idle_preview.py --scale 8 --cols 2 --out /tmp/idle.png
 ```
 
-- Default panels: date+clock+weather, date+clock, clock+weather, clock only.
+- Default sheet: date+clock+weather, date+clock, clock+weather, clock only,
+  clock off (big temps), clock off + HOT + status X, weather missing, no NTP,
+  12h + AM/PM.
+- `--hide-date` / `--no-weather` narrow the sheet to the matching states.
+- `--gap` is in output pixels (default 24), same as the status tool; `--scale`
+  is output pixels per OLED pixel (default 5).
 - The 1 px gray frame is drawn **outside** the 128x64 area: it marks the panel
   bounds without covering pixels.
 - `preview/` is git-ignored; never commit generated PNGs.

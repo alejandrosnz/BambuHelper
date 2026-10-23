@@ -2,32 +2,37 @@
 """Pixel preview of the SH1106 idle/clock screen (128x64).
 
 Replays the draw calls of renderIdle() in src/mono_display.cpp using the real
-Adafruit glcdfont and the real bitmaps from include/mono_weather_icons.h, then
-writes a PNG with the standard library only (no Pillow needed).
+Adafruit glcdfont, the real 30x30 bitmaps from include/mono_weather_icons.h and
+a captioned contact sheet, so one look tells you which state is broken.
 
 Why this exists: the panel has no antialiasing and hard 128x64 limits, so a
 1-px mistake is obvious on hardware but invisible in a diff. Run this before
-flashing any layout change and show the PNG to the user for approval.
+flashing any layout change and show the PNG to the user for approval. The
+drawing layer (fonts, string bounds, PNG sheet) lives in tools/oled_preview.py
+and is shared with tools/render_status_preview.py.
 
 The constants in the LAYOUT block below MIRROR renderIdle(). If you move a
 block there, move it here too, or the preview will lie. The script prints the
-computed coordinates and fails if anything leaves the panel.
+computed coordinates, the ink bbox of every panel and exits non-zero if
+anything leaves the panel.
 
 Usage:
-    python tools/render_idle_preview.py                  # 4 states -> preview/idle.png
-    python tools/render_idle_preview.py --date-format 5  # long format (size-1 fallback)
+    python tools/render_idle_preview.py                  # full tour -> preview/idle.png
+    python tools/render_idle_preview.py --date-format 7  # long format (size-1 fallback)
     python tools/render_idle_preview.py --all-formats    # one panel per date format
+    python tools/render_idle_preview.py --hide-date      # time-only anchors
     python tools/render_idle_preview.py --no-weather --12h --ampm AM
-    python tools/render_idle_preview.py --scale 8 --out /tmp/idle.png
+    python tools/render_idle_preview.py --status offline --scale 8
 
 Requires the Adafruit GFX library to be installed: run `pio run` once (or
 `pio pkg install`) so .pio/libdeps/<env>/.../glcdfont.c exists.
 
-Panel order in the PNG (default run):
-    1. date + clock + weather   (three blocks stacked edge to edge)
-    2. date + clock             (weather off)
-    3. clock + weather          (date hidden: original anchors)
-    4. clock                    (date hidden, weather off)
+Default sheet (clock on, unless the label says otherwise):
+    1. date + clock + weather   2. date + clock
+    3. clock + weather          4. clock only
+    5. clock off - big temps    6. clock off - HOT + status X
+    7. weather missing ("--")   8. no NTP ("--:--", no date)
+    9. 12h + AM/PM
 --hide-date keeps only the two date-hidden states; --no-weather drops every
 weather row; --all-formats draws one panel per date format.
 """
@@ -36,17 +41,15 @@ from __future__ import annotations
 
 import argparse
 import re
-import struct
 import sys
-import zlib
 from dataclasses import dataclass
 from datetime import date as Date
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from oled_preview import (Canvas, H, ROOT, W, auto_cols, load_font,
+                          load_gfx_font, load_xbm, write_sheet)
 
 # --- LAYOUT: mirrors renderIdle() -------------------------------------------
-W, H = 128, 64
 CLOCK_SIZE = 3
 CLOCK_INK_H = 6 * CLOCK_SIZE     # 18 px of ink at size 3 (glyph row 6 is blank)
 CLK_PAIR_TOP = 7                 # date top edge on the date+clock screen
@@ -62,6 +65,13 @@ DATE_TOP = 0
 # Anchors kept for the date-hidden screen (regression guard).
 CLK_Y_WX_OLD, CLK_Y_OLD = 5, 20
 WX_TOP_OLD, WX_TEMP_Y_OLD = 32, 40
+# Temp icons (8x9 XBM) and the fallback screen, shared with printing/done.
+TEMP_ICON_W, TEMP_ICON_H = 8, 9
+TEMP_ROW_Y = 32                  # icons top; values are drawn at 42 (baseline)
+TEMP_VAL_Y = 42
+BOTTOM_Y = 56                    # HOT warning row / status icon row
+HOT_THRESHOLD_C = 50
+STATUS_X, STATUS_Y = 116, 56     # 8x8 corner icon
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -72,6 +82,7 @@ def ordinal_suffix(day: int) -> str:
     if 11 <= day % 100 <= 13:
         return "th"
     return {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+
 
 ICON_BY_CODE = {
     "01d": "wi_day_clear", "01n": "wi_night_clear",
@@ -87,23 +98,6 @@ ICON_BY_CODE = {
 
 
 # --- Assets ------------------------------------------------------------------
-def find_font() -> Path:
-    candidates = sorted(ROOT.glob(".pio/libdeps/*/*/glcdfont.c"))
-    if not candidates:
-        sys.exit("glcdfont.c not found: run `pio run` (or `pio pkg install`) "
-                 "once so PlatformIO downloads Adafruit GFX.")
-    return candidates[0]
-
-
-def load_font() -> bytes:
-    src = find_font().read_text(encoding="utf-8", errors="ignore")
-    body = src[src.index("{") + 1:src.rindex("}")]
-    data = bytes(int(x, 16) for x in re.findall(r"0[xX]([0-9a-fA-F]{2})", body))
-    if len(data) < 256 * 5:
-        sys.exit(f"unexpected glcdfont.c size: {len(data)} bytes")
-    return data
-
-
 def load_icons() -> dict[str, bytes]:
     src = (ROOT / "include" / "mono_weather_icons.h").read_text(
         encoding="utf-8", errors="ignore")
@@ -119,39 +113,6 @@ def load_icons() -> dict[str, bytes]:
     if "degree_bmp" not in icons:
         sys.exit("degree_bmp not found in include/mono_weather_icons.h")
     return icons
-
-
-# --- GFX emulation -----------------------------------------------------------
-class OLED:
-    """Just enough of Adafruit_GFX for the idle screen: default font + bitmaps."""
-
-    def __init__(self, font: bytes):
-        self.font = font
-        self.p = [[0] * W for _ in range(H)]
-
-    def px(self, x: int, y: int) -> None:
-        if 0 <= x < W and 0 <= y < H:
-            self.p[y][x] = 1
-
-    def text(self, t: str, x: int, y: int, size: int = 1) -> None:
-        # Default font: 5 columns per glyph, bit 0 = top row, 6*size advance.
-        for ch in t:
-            base = (ord(ch) & 0xFF) * 5
-            for i in range(5):
-                line = self.font[base + i]
-                for j in range(8):
-                    if line & (1 << j):
-                        for a in range(size):
-                            for b in range(size):
-                                self.px(x + i * size + a, y + j * size + b)
-            x += 6 * size
-
-    def bmp(self, x: int, y: int, data: bytes, w: int, h: int) -> None:
-        stride = (w + 7) // 8
-        for j in range(h):
-            for i in range(w):
-                if data[j * stride + i // 8] & (0x80 >> (i % 8)):
-                    self.px(x + i, y + j)
 
 
 # --- Layout (mirrors renderIdle) ---------------------------------------------
@@ -193,14 +154,32 @@ class Scene:
     wx: bool
     wx_top: int
     wx_temp_y: int
+    clock_on: bool = True       # monoSettings.showClockIdle
+    status: str = "off"         # showStatusIdle: off|ok|offline|wifi
+    hot: bool = False           # monoSettings.showHotIdle (clock-off screen only)
+    weather_ok: bool = True     # monoWeatherGet() returned data
+    ntp: bool = True            # ntpOk(): without it the clock shows "--:--"
+    twelve: bool = False        # use24h == false: centered time + AM/PM
+    nozzle: int = 24            # big-temp screen (clock off)
+    bed: int = 24
 
 
 def build_scene(label: str, date_fmt: int, hide_date: bool, wx: bool,
-                day: Date) -> Scene:
-    if hide_date:
+                day: Date, ntp: bool = True, status: str = "off",
+                clock_on: bool = True, hot: bool = False,
+                weather_ok: bool = True, twelve: bool = False,
+                nozzle: int = 24, bed: int = 24) -> Scene:
+    extra = dict(clock_on=clock_on, status=status, hot=hot,
+                 weather_ok=weather_ok, ntp=ntp, twelve=twelve,
+                 nozzle=nozzle, bed=bed)
+    if not clock_on:
+        return Scene(label, None, 0, 0, 0, 0, False,
+                     WX_TOP_OLD, WX_TEMP_Y_OLD, **extra)
+    if hide_date or not ntp:
+        # Original anchors: the date is hidden when NTP has not synced yet.
         return Scene(label, None, 0, 0, 0,
                      CLK_Y_WX_OLD if wx else CLK_Y_OLD, wx,
-                     WX_TOP_OLD, WX_TEMP_Y_OLD)
+                     WX_TOP_OLD, WX_TEMP_Y_OLD, **extra)
     text = format_date(date_fmt, day)
     dsize = date_scale(text)
     date_h = 7 * dsize
@@ -208,77 +187,100 @@ def build_scene(label: str, date_fmt: int, hide_date: bool, wx: bool,
         date_y = DATE_TOP
         clk_y = date_h + (WX_ICON_TOP - date_h - CLOCK_INK_H) // 2 + 2
         return Scene(label, text, dsize, date_h, date_y, clk_y, True,
-                     WX_ICON_TOP, WX_ICON_TOP + WX_TEMP_DY)
+                     WX_ICON_TOP, WX_ICON_TOP + WX_TEMP_DY, **extra)
     # Date + clock only: date near the top and a roomy ink gap under it.
     date_y = CLK_PAIR_TOP
     return Scene(label, text, dsize, date_h, date_y,
                  date_y + 6 * dsize + CLK_INK_GAP, False,
-                 WX_TOP_OLD, WX_TEMP_Y_OLD)
+                 WX_TOP_OLD, WX_TEMP_Y_OLD, **extra)
 
 
 # --- Rendering ---------------------------------------------------------------
-def draw_scene(o: OLED, sc: Scene, time_s: str, twelve: bool, ampm: str,
-               temp: str, icon: bytes, degree: bytes) -> None:
-    if sc.date:
-        o.text(sc.date, (W - text_width(sc.date, sc.dsize)) // 2, sc.date_y,
-               sc.dsize)
-    if twelve:
-        # Centered time + AM/PM block, exactly as renderIdle does it.
-        w = text_width(time_s, CLOCK_SIZE)
-        x0 = max(0, (W - (w + 6 + 12)) // 2)
-        o.text(time_s, x0, sc.clk_y, CLOCK_SIZE)
-        o.text(ampm, x0 + w + 6, sc.clk_y + 8, 1)
+def draw_status(c: Canvas, kind: str) -> None:
+    """renderIdle(): the 8x8 corner icon (wifi warn / printer X / live circle)."""
+    x, y = STATUS_X, STATUS_Y
+    if kind == "wifi":
+        c.drawTriangle(x + 3, y, x, y + 7, x + 7, y + 7)
+        c.drawFastVLine(x + 3, y + 2, 3)
+        c.drawPixel(x + 3, y + 6)
+    elif kind == "offline":
+        c.drawLine(x, y, x + 7, y + 7)
+        c.drawLine(x + 7, y, x, y + 7)
+    else:  # "ok": empty circle = idle and connected
+        c.drawCircle(x + 4, y + 4, 3)
+
+
+def draw_scene(c: Canvas, sc: Scene, gfx, time_s: str, ampm: str, temp: str,
+               icon: bytes, degree: bytes,
+               temp_icons: dict[str, bytes]) -> None:
+    c.clear()
+    if sc.clock_on:
+        c.setFont()
+        c.setTextSize(1)
+        if sc.date:
+            c.setTextSize(sc.dsize)
+            _, _, dw, _ = c.getTextBounds(sc.date)
+            c.setCursor((W - dw) // 2, sc.date_y)
+            c.print(sc.date)
+            c.setTextSize(1)
+        c.setTextSize(CLOCK_SIZE)
+        if sc.ntp:
+            clock = time_s
+            if sc.twelve:
+                # Centered time + AM/PM block (5-char times leave no room at x=20).
+                _, _, w, _ = c.getTextBounds(clock, 20, sc.clk_y)
+                x0 = max(0, (W - (w + 6 + 12)) // 2)
+                c.setCursor(x0, sc.clk_y)
+                c.print(clock)
+                c.setTextSize(1)
+                c.setCursor(x0 + w + 6, sc.clk_y + 8)
+                c.print(ampm)
+                c.setTextSize(CLOCK_SIZE)
+            else:
+                c.setCursor(20, sc.clk_y)
+                c.print(clock)
+        else:
+            c.setCursor(20, sc.clk_y)
+            c.print("--:--")
+        if sc.wx:
+            txt = temp if sc.weather_ok else "--"
+            n = len(txt)
+            c.drawBitmap(WX_ICON_X, sc.wx_top,
+                         icon if sc.weather_ok else temp_icons["error"],
+                         WX_ICON_W, WX_ICON_H)
+            c.setTextSize(WX_TEMP_SIZE)
+            c.setCursor(WX_TEMP_X, sc.wx_temp_y)
+            c.print(txt)
+            deg_x = WX_TEMP_X + 2 + n * 12
+            c.drawBitmap(deg_x, sc.wx_temp_y, degree, 8, 10)
+            c.setCursor(deg_x + 9, sc.wx_temp_y)
+            c.print("C")
+        c.setFont()
+        c.setTextSize(1)
     else:
-        o.text(time_s, 20, sc.clk_y, CLOCK_SIZE)
-    if sc.wx:
-        n = len(temp)
-        o.bmp(WX_ICON_X, sc.wx_top, icon, WX_ICON_W, WX_ICON_H)
-        o.text(temp, WX_TEMP_X, sc.wx_temp_y, WX_TEMP_SIZE)
-        deg_x = WX_TEMP_X + 2 + n * 12
-        o.bmp(deg_x, sc.wx_temp_y, degree, 8, 10)
-        o.text("C", deg_x + 9, sc.wx_temp_y, WX_TEMP_SIZE)
-
-
-def write_png(path: Path, canvases: list[OLED], scale: int, gap: int) -> None:
-    """Grayscale PNG, stdlib only. 1 px gray frame shows the 128x64 bounds."""
-    gap = max(gap, 4)
-    slot_w = W + 2
-    slot_h = H + 2
-    width = len(canvases) * slot_w * scale + (len(canvases) - 1) * gap * scale
-    height = slot_h * scale
-    img = [[255] * width for _ in range(height)]
-
-    for k, o in enumerate(canvases):
-        ox = k * (slot_w + gap) * scale + scale          # 1 px frame offset
-        oy = scale
-        for y in range(H):
-            for x in range(W):
-                if o.p[y][x]:
-                    for a in range(scale):
-                        for b in range(scale):
-                            img[oy + y * scale + a][ox + x * scale + b] = 0
-        # Frame just outside the panel: exact 128x64 limits, content untouched.
-        top, bottom = oy - 1, oy + H * scale
-        left, right = ox - 1, ox + W * scale
-        for x in range(left, right + 1):
-            img[top][x] = 170
-            img[bottom][x] = 170
-        for y in range(top, bottom + 1):
-            img[y][left] = 170
-            img[y][right] = 170
-
-    raw = b"".join(b"\x00" + bytes(row) for row in img)
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return (struct.pack(">I", len(data)) + tag + data +
-                struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(
-        b"\x89PNG\r\n\x1a\n" +
-        chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)) +
-        chunk(b"IDAT", zlib.compress(raw, 9)) +
-        chunk(b"IEND", b""))
+        # Big actual temps with icons (targets rarely matter in idle).
+        c.setFont(gfx)
+        c.setTextSize(1)
+        nb, bb = str(sc.nozzle), str(sc.bed)
+        x = 0
+        c.drawBitmap(x, TEMP_ROW_Y, temp_icons["nozzle"], TEMP_ICON_W,
+                     TEMP_ICON_H)
+        x += 11
+        c.setCursor(x, TEMP_VAL_Y)
+        c.print(nb)
+        x += c.getTextBounds(nb)[2] + 8
+        c.drawBitmap(x, TEMP_ROW_Y, temp_icons["bed"], TEMP_ICON_W,
+                     TEMP_ICON_H)
+        x += 12
+        c.setCursor(x, TEMP_VAL_Y)
+        c.print(bb)
+        c.setFont()
+        c.setTextSize(1)
+        c.setCursor(0, BOTTOM_Y)
+        if sc.hot and sc.nozzle > HOT_THRESHOLD_C:
+            c.print("HOT ")
+    if sc.status != "off":
+        draw_status(c, sc.status)
 
 
 # --- Checks ------------------------------------------------------------------
@@ -299,16 +301,23 @@ def check_scene(sc: Scene, icon: bytes) -> list[str]:
         if sc.date_y < 0 or sc.date_y + sc.date_h > H:
             errs.append(f"date ink rows {sc.date_y}..{sc.date_y + sc.date_h - 1} "
                         "leave the panel")
-    if sc.clk_y < 0 or sc.clk_y + CLOCK_INK_H > H:
-        errs.append(f"clock ink rows {sc.clk_y}..{sc.clk_y + CLOCK_INK_H - 1} "
-                    "leave the panel")
-    if sc.date and sc.clk_y < sc.date_y + sc.date_h:
-        errs.append("clock overlaps the date")
-    if sc.wx:
-        lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
-        if sc.wx_top + lo < 0 or sc.wx_top + hi > H - 1:
-            errs.append(f"weather ink rows {sc.wx_top + lo}.."
-                        f"{sc.wx_top + hi} leave the panel")
+    if sc.clock_on:
+        if sc.clk_y < 0 or sc.clk_y + CLOCK_INK_H > H:
+            errs.append(f"clock ink rows {sc.clk_y}..{sc.clk_y + CLOCK_INK_H - 1} "
+                        "leave the panel")
+        if sc.date and sc.clk_y < sc.date_y + sc.date_h:
+            errs.append("clock overlaps the date")
+        if sc.wx:
+            lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
+            if sc.wx_top + lo < 0 or sc.wx_top + hi > H - 1:
+                errs.append(f"weather ink rows {sc.wx_top + lo}.."
+                            f"{sc.wx_top + hi} leave the panel")
+    else:
+        if TEMP_ROW_Y + TEMP_ICON_H > H:
+            errs.append("temp icons leave the panel")
+    if not sc.clock_on and sc.hot and sc.nozzle > HOT_THRESHOLD_C:
+        if BOTTOM_Y + 7 > H:
+            errs.append("HOT warning leaves the panel")
     return errs
 
 
@@ -326,6 +335,11 @@ def firmware_drift_warnings() -> list[str]:
         (r"wxIconY = dateShown \? wxTop : (\d+);", WX_TOP_OLD, "old icon top"),
         (r"wxTempY = dateShown \? wxTop \+ (\d+) : (\d+);",
          (WX_TEMP_DY, WX_TEMP_Y_OLD), "weather temp offsets"),
+        (r"const int iconX = (\d+);", STATUS_X, "idle status icon x"),
+        (r"const int iconY = (\d+);", STATUS_Y, "idle status icon y"),
+        (r"drawNozzleIcon\(x, 32\);\s*\n\s*x \+= (\d+);", 11,
+         "clock-off nozzle icon gap"),
+        (r"const int BOTTOM_Y = (\d+);", BOTTOM_Y, "BOTTOM_Y"),
     ]
     warns = []
     for pattern, expected, name in pairs:
@@ -340,10 +354,40 @@ def firmware_drift_warnings() -> list[str]:
     return warns
 
 
+# --- Scenes ------------------------------------------------------------------
+def default_scenes(date_fmt: int, day: Date, status: str,
+                   twelve: bool) -> list[Scene]:
+    """The tour drawn by a plain run: every idle branch and OLED toggle."""
+    wx_on = build_scene("date + clock + weather", date_fmt, False, True, day,
+                        status=status, twelve=twelve)
+    date_only = build_scene("date + clock", date_fmt, False, False, day,
+                            status=status, twelve=twelve)
+    clock_wx = build_scene("clock + weather", date_fmt, True, True, day,
+                           status=status, twelve=twelve)
+    clock_only = build_scene("clock only", date_fmt, True, False, day,
+                             status=status, twelve=twelve)
+    cold = build_scene("clock off - big temps", date_fmt, False, False, day,
+                       clock_on=False, nozzle=24, bed=24)
+    hot = build_scene("clock off - HOT + status X", date_fmt, False, False,
+                      day, clock_on=False, status="offline", hot=True,
+                      nozzle=62, bed=45)
+    no_wx = build_scene("weather missing (--)", date_fmt, False, True, day,
+                        weather_ok=False, status=status, twelve=twelve)
+    no_ntp = build_scene("no NTP (--:--, no date)", date_fmt, True, True, day,
+                         ntp=False, status=status)
+    scenes = [wx_on, date_only, clock_wx, clock_only, cold, hot, no_wx,
+              no_ntp]
+    if not twelve:
+        # With --12h every clock panel already shows the AM/PM block.
+        scenes.append(build_scene("12h + AM/PM", date_fmt, False, True, day,
+                                  status=status, twelve=True))
+    return scenes
+
+
 # --- Main --------------------------------------------------------------------
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Render the SH1106 idle screen to a PNG (no Pillow).")
+        description="Render the SH1106 idle screen to a captioned PNG sheet.")
     ap.add_argument("--date-format", type=int, choices=range(8), default=0,
                     help="0=DD.MM.YYYY 1=DD-MM-YYYY 2=MM/DD/YYYY 3=YYYY-MM-DD "
                          "4=DD MMM YYYY 5=MMM DD, YYYY 6=DD MMM 7=MMM DDth "
@@ -363,23 +407,36 @@ def main() -> int:
     ap.add_argument("--temp", default="21", help="weather temp text (default 21)")
     ap.add_argument("--icon", default="01d",
                     help="OpenWeatherMap icon code, e.g. 01d, 10n (default 01d)")
+    ap.add_argument("--status", choices=("off", "ok", "offline", "wifi"),
+                    default="off",
+                    help="idle corner icon on the clock panels (default off)")
     ap.add_argument("--scale", type=int, default=5, help="pixels per OLED px")
-    ap.add_argument("--gap", type=int, default=14, help="gap between panels")
+    ap.add_argument("--cols", type=int, default=0,
+                    help="panels per row (default: auto from panel count)")
+    ap.add_argument("--gap", type=int, default=24,
+                    help="gap between panels in output px (default 24)")
     ap.add_argument("--out", type=Path, default=ROOT / "preview" / "idle.png",
                     help="output PNG (default preview/idle.png)")
     args = ap.parse_args()
 
     font = load_font()
+    gfx = load_gfx_font()
     icons = load_icons()
     icon = icons.get(ICON_BY_CODE.get(args.icon, "wi_error"), icons["wi_error"])
     degree = icons["degree_bmp"]
+    temp_icons = {
+        "nozzle": load_xbm(ROOT / "src" / "mono_display.cpp", "NZL_BMP"),
+        "bed": load_xbm(ROOT / "src" / "mono_display.cpp", "BED_BMP"),
+        "error": icons["wi_error"],
+    }
 
     scenes: list[Scene] = []
     if args.all_formats:
         for fmt in range(8):
             scenes.append(build_scene(f"format {fmt}", fmt, False,
-                                      not args.no_weather, args.date))
-    else:
+                                      not args.no_weather, args.date,
+                                      status=args.status, twelve=args.twelve))
+    elif args.hide_date or args.no_weather:
         hides = (True,) if args.hide_date else (False, True)
         weathers = (False,) if args.no_weather else (True, False)
         for hide in hides:
@@ -389,35 +446,50 @@ def main() -> int:
                 else:
                     label = "date + clock + weather" if wx else "date + clock"
                 scenes.append(build_scene(label, args.date_format, hide, wx,
-                                          args.date))
+                                          args.date, status=args.status,
+                                          twelve=args.twelve))
+    else:
+        scenes = default_scenes(args.date_format, args.date, args.status,
+                                args.twelve)
 
-    canvases = []
+    panels: list[tuple[str, Canvas]] = []
     failed = False
-    print(f"{'scene':<26} {'date':<13} {'sz':>2} {'d_y':>3} {'clk_y':>5} "
-          f"{'wx ink':>8}  result")
-    for sc in scenes:
-        o = OLED(font)
-        draw_scene(o, sc, args.time, args.twelve, args.ampm, args.temp,
-                   icon, degree)
-        canvases.append(o)
+    print(f"\nidle ({len(scenes)} panels) -> {args.out}")
+    print(f"  {'#':>2}  {'scene':<30} {'date':<13} {'sz':>2} {'d_y':>3} "
+          f"{'clk_y':>5} {'wx ink':>7}  {'ink bbox':<14} result")
+    for i, sc in enumerate(scenes):
+        c = Canvas(font, gfx)
+        draw_scene(c, sc, gfx, args.time, args.ampm, args.temp, icon, degree,
+                   temp_icons)
         errs = check_scene(sc, icon)
         failed |= bool(errs)
         if sc.wx:
             lo, hi = ink_rows(icon, WX_ICON_W, WX_ICON_H)
             wx_rows = f"{sc.wx_top + lo}..{sc.wx_top + hi}"
+        elif not sc.clock_on:
+            wx_rows = "temps"
         else:
             wx_rows = "-"
-        print(f"{sc.label:<26} {sc.date or '(hidden)':<13} {sc.dsize:>2} "
-              f"{sc.date_y:>3} {sc.clk_y:>5} {wx_rows:>8}  "
-              f"{'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")
+        bbox = c.ink_bbox()
+        if bbox and (bbox[0] < 0 or bbox[2] >= W or bbox[1] < 0 or bbox[3] >= H):
+            errs.append(f"ink bbox {bbox} leaves the panel")
+        failed |= bool(errs)
+        bb = f"{bbox[0]}..{bbox[2]} {bbox[1]}..{bbox[3]}" if bbox else "-"
+        print(f"  {i + 1:>2}  {sc.label:<30} {sc.date or '-':<13} "
+              f"{sc.dsize:>2} {sc.date_y:>3} {sc.clk_y:>5} {wx_rows:>7}  "
+              f"{bb:<14} {'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")
+        panels.append((sc.label, c))
 
     warns = firmware_drift_warnings()
     for w in warns:
         print(f"warning: {w}", file=sys.stderr)
 
-    write_png(args.out, canvases, max(1, args.scale), args.gap)
-    print(f"\nwrote {args.out}  ({len(canvases)} panel(s), "
-          f"{args.scale}x, {args.time}{' ' + args.ampm if args.twelve else ''}"
+    cols = args.cols or auto_cols(len(panels))
+    write_sheet(args.out, panels, font, max(1, args.scale), max(1, cols),
+                args.gap)
+    print(f"\nwrote {args.out}  ({len(panels)} panels, {args.scale}x, "
+          f"{max(1, cols)} column(s), {args.time}"
+          f"{' ' + args.ampm if any(s.twelve for s in scenes) else ''}"
           f"{', weather ' + args.icon if any(s.wx for s in scenes) else ''})")
     return 1 if failed else 0
 
