@@ -58,7 +58,8 @@ The build must end in `SUCCESS` and show RAM/flash usage. On the C3, hold
 There is no unit-test suite. The gates are:
 
 1. `pio run` compiles and the image still fits.
-2. `tools/render_idle_preview.py` for idle-screen layout work.
+2. `tools/render_idle_preview.py` for idle-screen layout work and
+   `tools/render_status_preview.py` for printing/pause/done.
 3. On-device check through the serial `mock` commands (below).
 
 ### Mock mode (no printer needed)
@@ -94,6 +95,7 @@ This is the only way to see the real panel without a printer.
 | `web/app.js` / `web/app.css` | Portal assets, gzipped at build time |
 | `tools/gen_web_assets.py` | Pre-build step: gzip assets into PROGMEM |
 | `tools/render_idle_preview.py` | Pixel preview of the idle screen |
+| `tools/render_status_preview.py` | Pixel preview of the printing/pause/done screens |
 | `tools/release.py` | OTA packaging + slot-size check |
 | `include/config.h` | `FW_VERSION`, board/feature defaults |
 
@@ -216,8 +218,29 @@ python tools/render_idle_preview.py --scale 8 --out /tmp/idle.png
 - `preview/` is git-ignored; never commit generated PNGs.
 - The script mirrors `renderIdle()` constants. It warns when the firmware
   constants drift; if you move a block, update both.
-- It models the idle screen only. For another screen, add a scene to the script
-  instead of eyeballing the code.
+- It models the idle screen only; `tools/render_status_preview.py` does the
+  printing, pause and done screens. For another screen, add a scene to one of
+  the scripts instead of eyeballing the code.
+
+`tools/render_status_preview.py` replays `renderPrinting()` (both pause blink
+frames) and `renderFinish()` with the real `FreeMonoBold9pt7b` glyphs, the real
+`NZL_BMP`/`BED_BMP` icons and a curated set of states. It writes a captioned
+contact sheet, prints a per-panel table (wrapped title lines, stage/ETA, ink
+bbox) and exits non-zero if a pixel leaves the panel.
+
+```bash
+python tools/render_status_preview.py                  # both -> preview/printing.png + done.png
+python tools/render_status_preview.py --screen printing
+python tools/render_status_preview.py --matrix         # every OLED toggle combo
+python tools/render_status_preview.py --scale 6 --cols 2
+```
+
+- Curated printing sheet: 0/50/73/87/100 %, 1-line / 2-line / hard-cut titles,
+  pause with the bar fill drawn and blinking empty, no data, no NTP, remaining
+  vs ETA, midnight `+1`, a truncated stage, and each of `showLayer`, `showBar`,
+  `showTimePrinting` and `showTimeAlt` off.
+- Curated done sheet: temps off/on, targets 0 vs set, 3-digit values, 1-line /
+  2-line / overflow titles and a non-Latin (empty) title.
 
 ## The approval loop (UI changes)
 
