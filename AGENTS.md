@@ -228,9 +228,6 @@ python tools/render_idle_preview.py --scale 8 --cols 2 --out /tmp/idle.png
   is output pixels per OLED pixel (default 5).
 - The 1 px gray frame is drawn **outside** the 128x64 area: it marks the panel
   bounds without covering pixels.
-- `preview/` is git-ignored scratch space; the committed snapshots live in
-  `img/preview/` (regenerate them with `--out` / `--out-dir` when a layout is
-  approved).
 - The script mirrors `renderIdle()` constants. It warns when the firmware
   constants drift; if you move a block, update both.
 - It models the idle screen only; `tools/render_status_preview.py` does the
@@ -256,6 +253,21 @@ python tools/render_status_preview.py --scale 6 --cols 2
   `showTimePrinting` and `showTimeAlt` off.
 - Curated done sheet: temps off/on, targets 0 vs set, 3-digit values, 1-line /
   2-line / overflow titles and a non-Latin (empty) title.
+
+### Committed snapshots (`img/preview/`)
+
+The approved sheets are kept in `img/preview/` so a layout can be checked
+without rebuilding. After a layout change is approved, regenerate and commit
+them in the same commit:
+
+```bash
+python tools/render_idle_preview.py --out img/preview/idle.png
+python tools/render_status_preview.py --out-dir img/preview   # printing.png + done.png
+```
+
+- `preview/` is git-ignored scratch space; `img/preview/` is the committed set.
+- `--matrix` writes `preview/<screen>-matrix.png`: toggle cross-products for
+  debugging, not documentation. Do not commit those.
 
 ## The approval loop (UI changes)
 
@@ -292,6 +304,7 @@ The panel is tiny and the user has a clear mental picture of it. Do not guess.
 - [ ] New setting wired through NVS, portal, backup and renderer.
 - [ ] Repaint trigger added (`MonoSig`/`monoFlagsNow`) if pixels change.
 - [ ] Preview rendered for every affected state and approved by the user.
+- [ ] `img/preview/` snapshots regenerated and committed with the change.
 - [ ] Checked on hardware with `mock` (or explicitly left to the user).
 - [ ] README / portal hint updated if user-visible behaviour changed.
 - [ ] No NVS key renamed, no exceptions introduced, no user work reverted.
